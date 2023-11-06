@@ -241,7 +241,8 @@ export async function renderToStream(
       firstFlush: firstFlushTime,
     },
     _symbols: renderSymbols,
-  };
+    stream,
+  } as RenderToStreamResult;
   return result;
 }
 

@@ -43,6 +43,7 @@ export async function submoduleOptimizer(config: BuildConfig) {
       format: 'esm',
       banner: { js: getBanner('@builder.io/qwik/optimizer', config.distVersion) },
       outExtension: { '.js': '.mjs' },
+      external: ['miniflare'],
       define: {
         'globalThis.IS_CJS': 'false',
         'globalThis.IS_ESM': 'true',
@@ -69,6 +70,7 @@ export async function submoduleOptimizer(config: BuildConfig) {
         ...qwikloaderScripts,
       },
       platform: 'node',
+      external: ['miniflare'],
       target: nodeTarget,
       plugins: [RawPlugin()],
     });

@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import type { Render, RenderToStreamOptions } from '@builder.io/qwik/server';
+// import type { /*Render,*/ RenderToStreamOptions } from '@builder.io/qwik/server';
 import { magenta } from 'kleur/colors';
 import type { IncomingMessage, ServerResponse } from 'http';
 
@@ -13,6 +13,8 @@ import imageDevTools from './image-size-runtime.html?raw';
 import clickToComponent from './click-to-component.html?raw';
 import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
+
+import { createWorkerdHandler } from 'workerd-vite-utils';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -52,6 +54,78 @@ export async function configureDevServer(
     }
   }
 
+  const srcBase = opts.srcDir
+  ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+  : 'src';
+
+  const workerdHandler = createWorkerdHandler({
+    entrypoint: opts.input[0], // './src/entry.ssr.tsx',
+    server: server as any,
+    frameworkRequestHandlingJs: `
+      // return new Response(JSON.stringify({
+      //   html: 'this is a test'
+      // }));
+      const url = request.url;
+      // const renderedString = entryPoint.render(url);
+
+      const { writable, readable } = new TransformStream();
+      const response = new Response(readable, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+      });
+      const writer = writable.getWriter();
+      const encoder = new TextEncoder();
+      const stream = {
+        write(chunk) {
+          writer.write(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
+        },
+        close() {
+          writer.close();
+        },
+      };
+
+      let renderOpts = null;
+      try {
+        renderOpts = JSON.parse(request.headers.get('x-workerd-rendering-opts') ?? 'null');
+        const srcBase = ${JSON.stringify(srcBase)};
+        const getSymbolHash = (symbolName) => {
+          const index = symbolName.lastIndexOf('_');
+          if (index > -1) {
+            return symbolName.slice(index + 1);
+          }
+          return symbolName;
+        };
+        renderOpts.symbolMapper = (symbolName, mapper) => {
+              const defaultChunk = [
+                symbolName,
+                '/' + srcBase + '/' + symbolName.toLowerCase() + '.js',
+              ];
+              if (mapper) {
+                const hash = getSymbolHash(symbolName);
+                return mapper[hash] ?? defaultChunk;
+              } else {
+                return defaultChunk;
+              }
+            };
+        renderOpts.stream = stream;
+      } catch (e) {
+        renderOpts = null;
+      }
+
+      const render = entryPoint.default ?? entryPoint.render;
+
+      await render(renderOpts);
+      // const result = ctx.waitUntil(render(renderOpts));
+
+      stream.close();
+
+      return response;
+    `,
+  });
+
+
+
   // qwik middleware injected BEFORE vite internal middlewares
   server.middlewares.use(async (req: any, res: any, next: any) => {
     try {
@@ -83,85 +157,105 @@ export async function configureDevServer(
           return;
         }
 
-        const ssrModule = await server.ssrLoadModule(opts.input[0]);
+        const manifest: QwikManifest = {
+          manifestHash: '',
+          symbols: {},
+          mapping: {},
+          bundles: {},
+          injections: [],
+          version: '1',
+        };
 
-        const render: Render = ssrModule.default ?? ssrModule.render;
+        const added = new Set();
+        Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
+          entry[1].forEach((v) => {
+            const hook = v.info?.meta?.hook;
+            let url = v.url;
+            if (v.lastHMRTimestamp) {
+              url += `?t=${v.lastHMRTimestamp}`;
+            }
+            if (hook) {
+              manifest.mapping[hook.name] = relativeURL(url, opts.rootDir);
+            }
 
-        if (typeof render === 'function') {
-          const manifest: QwikManifest = {
-            manifestHash: '',
-            symbols: {},
-            mapping: {},
-            bundles: {},
-            injections: [],
-            version: '1',
-          };
-
-          const added = new Set();
-          Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
-            entry[1].forEach((v) => {
-              const hook = v.info?.meta?.hook;
-              let url = v.url;
-              if (v.lastHMRTimestamp) {
-                url += `?t=${v.lastHMRTimestamp}`;
-              }
-              if (hook) {
-                manifest.mapping[hook.name] = relativeURL(url, opts.rootDir);
-              }
-
-              const { pathId, query } = parseId(v.url);
-              if (query === '' && ['.css', '.scss', '.sass'].some((ext) => pathId.endsWith(ext))) {
-                added.add(v.url);
-                manifest.injections!.push({
-                  tag: 'link',
-                  location: 'head',
-                  attributes: {
-                    rel: 'stylesheet',
-                    href: url,
-                  },
-                });
-              }
-            });
-          });
-
-          const srcBase = opts.srcDir
-            ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-            : 'src';
-
-          const renderOpts: RenderToStreamOptions = {
-            debug: true,
-            locale: serverData.locale,
-            stream: res,
-            snapshot: !isClientDevOnly,
-            manifest: isClientDevOnly ? undefined : manifest,
-            symbolMapper: isClientDevOnly
-              ? undefined
-              : (symbolName, mapper) => {
-                  const defaultChunk = [
-                    symbolName,
-                    `/${srcBase}/${symbolName.toLowerCase()}.js`,
-                  ] as const;
-                  if (mapper) {
-                    const hash = getSymbolHash(symbolName);
-                    return mapper[hash] ?? defaultChunk;
-                  } else {
-                    return defaultChunk;
-                  }
+            const { pathId, query } = parseId(v.url);
+            if (query === '' && ['.css', '.scss', '.sass'].some((ext) => pathId.endsWith(ext))) {
+              added.add(v.url);
+              manifest.injections!.push({
+                tag: 'link',
+                location: 'head',
+                attributes: {
+                  rel: 'stylesheet',
+                  href: url,
                 },
-            prefetchStrategy: null,
-            serverData,
-            containerAttributes: {
-              ...serverData.containerAttributes,
-            },
-          };
+              });
+            }
+          });
+        });
 
+        // const srcBase = opts.srcDir
+        //   ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+        //   : 'src';
+
+        // qwikcity is not fully serializable so we need to extract it
+        const { qwikcity, ...serializableServerData } = serverData;
+
+        // ev is not serializable so we need to remove it
+        const { ev, ...serializableQwikcity } = qwikcity;
+
+        // NOTE: we can only pass serializable things to workerd so not all fields of renderOpts are allowed
+        const renderOpts: any = { // RenderToStreamOptions
+          debug: true,
+          locale: serverData.locale,
+          snapshot: !isClientDevOnly,
+          manifest: isClientDevOnly ? undefined : manifest,
+          prefetchStrategy: null,
+          serverData: {
+            ...serializableServerData,
+            qwikcity: serializableQwikcity,
+            ev: {
+              // let's try to preserve the ev serializable data
+              basePathname: ev.basePathname,
+              method: ev.method,
+              params: ev.params,
+              pathname: ev.pathname,
+              platform: {
+                ssr: true,
+                node: ev.platform.node,
+              },
+              url: ev.url
+            },
+          },
+          containerAttributes: {
+            ...serverData.containerAttributes,
+          },
+        };
+
+        // const ssrModule = await server.ssrLoadModule(opts.input[0]);
+
+        // const render: Render = ssrModule.default ?? ssrModule.render;
+        // const renderResult = await render(renderOpts);
+
+        const msg = {
+          headers: {},
+        } as IncomingMessage;
+        msg.method = 'GET';
+        msg.headers['x-workerd-rendering-opts'] = JSON.stringify(renderOpts);
+        
+        msg.url = req.url;
+
+        const resp = await workerdHandler(msg);
+        // let's just read the whole stream here (this can be improved later)
+        const text = await resp.text();
+
+        const renderResult = resp;
+
+        if (renderResult) {
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.setHeader('Cache-Control', 'no-cache, no-store, max-age=0');
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('X-Powered-By', 'Qwik Vite Dev Server');
           res.writeHead(status);
-
-          const result = await render(renderOpts);
 
           // Sometimes new CSS files are added after the initial render
           Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
@@ -177,10 +271,11 @@ export async function configureDevServer(
             });
           });
 
+          res.write(text);
           // End stream
-          if ('html' in result) {
-            res.write((result as any).html);
-          }
+          // if ('html' in renderResult) {
+          //   res.write((renderResult as any).html);
+          // }
           res.write(
             END_SSR_SCRIPT(opts, opts.srcDir ? opts.srcDir : path.join(opts.rootDir, 'src'))
           );

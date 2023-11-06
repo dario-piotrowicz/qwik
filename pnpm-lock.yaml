@@ -126,6 +126,9 @@ importers:
       install:
         specifier: ^0.13.0
         version: 0.13.0
+      miniflare:
+        specifier: https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322
+        version: '@prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322'
       monaco-editor:
         specifier: ^0.44.0
         version: 0.44.0
@@ -480,6 +483,12 @@ importers:
       kleur:
         specifier: 4.1.5
         version: 4.1.5
+      miniflare:
+        specifier: https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322
+        version: '@prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322'
+      workerd-vite-utils:
+        specifier: /Users/dario/Repos/my-repos/preact-vite-workerd-ssr/workerd-vite-utils
+        version: link:../../../preact-vite-workerd-ssr/workerd-vite-utils
 
   packages/qwik-auth:
     devDependencies:
@@ -1460,8 +1469,26 @@ packages:
     dev: true
     optional: true
 
+  /@cloudflare/workerd-darwin-64@1.20231025.0:
+    resolution: {integrity: sha512-MYRYTbSl+tjGg6su7savlLIb8cOcKJfdGpA+WdtgqT2OF7O+89Lag0l1SA/iyVlUkT31Jc6OLHqvzsXgmg+niQ==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
   /@cloudflare/workerd-darwin-arm64@1.20231002.0:
     resolution: {integrity: sha512-dv8nztYFaTYYgBpyy80vc4hdMYv9mhyNbvBsZywm8S7ivcIpzogi0UKkGU4E/G0lYK6W3WtwTBqwRe+pXJ1+Ww==}
+    engines: {node: '>=16'}
+    cpu: [arm64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@cloudflare/workerd-darwin-arm64@1.20231025.0:
+    resolution: {integrity: sha512-BszjtBDR84TVa6oWe74dePJSAukWlTmLw9zR4KeWuwZLJGV7RMm6AmwGStetjnwZrecZaaOFELfBCAHtsebV0Q==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
@@ -1478,6 +1505,15 @@ packages:
     dev: true
     optional: true
 
+  /@cloudflare/workerd-linux-64@1.20231025.0:
+    resolution: {integrity: sha512-AT9dxgKXOa9xZxZ3k2a432axPJJ58KpoNWnPiPYGpuAuLoWnfcYwwh6mr9sZVcTdAdTAK9Xu9c81tp0YABanUw==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
   /@cloudflare/workerd-linux-arm64@1.20231002.0:
     resolution: {integrity: sha512-GPaa66ZSq1gK09r87c5CJbHIApcIU//LVHz3rnUxK0//00YCwUuGUUK1dn/ylg+fVqDQxIDmH+ABnobBanvcDA==}
     engines: {node: '>=16'}
@@ -1487,8 +1523,26 @@ packages:
     dev: true
     optional: true
 
+  /@cloudflare/workerd-linux-arm64@1.20231025.0:
+    resolution: {integrity: sha512-EIjex5o2k80YZWPix1btGybL/vNZ3o6vqKX9ptS0JcFkHV5aFX5/kcMwSBRjiIC+w04zVjmGQx3N1Vh3njuncg==}
+    engines: {node: '>=16'}
+    cpu: [arm64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
   /@cloudflare/workerd-windows-64@1.20231002.0:
     resolution: {integrity: sha512-ybIy+sCme0VO0RscndXvqWNBaRMUOc8vhi+1N2h/KDsKfNLsfEQph+XWecfKzJseUy1yE2rV1xei3BaNmaa6vg==}
+    engines: {node: '>=16'}
+    cpu: [x64]
+    os: [win32]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@cloudflare/workerd-windows-64@1.20231025.0:
+    resolution: {integrity: sha512-7vtq0mO22A2v0OOsKXa760r9a84Gg8CK0gDu5uNWlj6hojmt011iz7jJt76I7oo/XrVwVlVfu69GnA3ljx6U8w==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
@@ -18551,6 +18605,19 @@ packages:
       '@cloudflare/workerd-windows-64': 1.20231002.0
     dev: true
 
+  /workerd@1.20231025.0:
+    resolution: {integrity: sha512-W1PFtpMFfvmm+ozBf+u70TE3Pviv7WA4qzDeejHDC4z+PFDq4+3KJCkgffaGBO86h+akWO0hSsc0uXL2zAqofQ==}
+    engines: {node: '>=16'}
+    hasBin: true
+    requiresBuild: true
+    optionalDependencies:
+      '@cloudflare/workerd-darwin-64': 1.20231025.0
+      '@cloudflare/workerd-darwin-arm64': 1.20231025.0
+      '@cloudflare/workerd-linux-64': 1.20231025.0
+      '@cloudflare/workerd-linux-arm64': 1.20231025.0
+      '@cloudflare/workerd-windows-64': 1.20231025.0
+    dev: true
+
   /wrangler@3.11.0:
     resolution: {integrity: sha512-glR3UPD1RJDokOIOUt56vPLacV7riWdfhPUCx5ZmZWVn0dDXB51ktj9DyK2VU8zHM+yj90OQhwHVdI77mGxWkw==}
     engines: {node: '>=16.13.0'}
@@ -18832,6 +18899,30 @@ packages:
 
   /zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
+
+  '@prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322':
+    resolution: {registry: https://registry.npmjs.org/, tarball: https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322}
+    name: miniflare
+    version: 0.0.0-f8cf5e89
+    engines: {node: '>=16.13'}
+    dependencies:
+      acorn: 8.10.0
+      acorn-walk: 8.2.0
+      capnp-ts: 0.7.0
+      exit-hook: 2.2.1
+      glob-to-regexp: 0.4.1
+      source-map-support: 0.5.21
+      stoppable: 1.1.0
+      undici: 5.26.0
+      workerd: 1.20231025.0
+      ws: 8.13.0
+      youch: 3.2.3
+      zod: 3.22.4
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+    dev: true
 
   github.com/BuilderIo/qwik-build/0080db89d43112fea2ed6b281f70f61d00f42edd(@types/node@20.8.4)(terser@5.21.0)(undici@5.26.0):
     resolution: {tarball: https://codeload.github.com/BuilderIo/qwik-build/tar.gz/0080db89d43112fea2ed6b281f70f61d00f42edd}

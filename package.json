@@ -64,6 +64,7 @@
     "execa": "7.2.0",
     "express": "4.18.2",
     "install": "^0.13.0",
+    "miniflare": "https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322",
     "monaco-editor": "^0.44.0",
     "mri": "1.2.0",
     "ora": "6.3.1",
