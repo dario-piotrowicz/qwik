@@ -215,6 +215,11 @@ export async function configureDevServer(
             qwikcity: serializableQwikcity,
             ev: {
               // let's try to preserve the ev serializable data
+              '___@_RequestEvLoaders': ev['___@_RequestEvLoaders'],
+              '___@_RequestEvMode': ev['___@_RequestEvMode'],
+              '___@_RequestEvQwikSerializer': ev['___@_RequestEvQwikSerializer'],
+              '___@_RequestEvRoute' : ev['___@_RequestEvRoute'],
+              '___@_RequestEvTrailingSlash': ev['___@_RequestEvTrailingSlash'],
               basePathname: ev.basePathname,
               method: ev.method,
               params: ev.params,
