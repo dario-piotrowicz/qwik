@@ -134,26 +134,26 @@ export async function configureDevServer(
           // ev is not serializable so we need to remove it
           const { ev, ...serializableQwikcity } = qwikcity;
 
-          const renderOpts: RenderToStreamOptions = {
+          const renderOpts: Omit<RenderToStreamOptions, 'stream'> = {
             debug: true,
             locale: serverData.locale,
-            stream: res,
+            // stream: res,
             snapshot: !isClientDevOnly,
             manifest: isClientDevOnly ? undefined : manifest,
-            symbolMapper: isClientDevOnly
-              ? undefined
-              : (symbolName, mapper) => {
-                  const defaultChunk = [
-                    symbolName,
-                    `/${srcBase}/${symbolName.toLowerCase()}.js`,
-                  ] as const;
-                  if (mapper) {
-                    const hash = getSymbolHash(symbolName);
-                    return mapper[hash] ?? defaultChunk;
-                  } else {
-                    return defaultChunk;
-                  }
-                },
+            // symbolMapper: isClientDevOnly
+            //   ? undefined
+            //   : (symbolName, mapper) => {
+            //       const defaultChunk = [
+            //         symbolName,
+            //         `/${srcBase}/${symbolName.toLowerCase()}.js`,
+            //       ] as const;
+            //       if (mapper) {
+            //         const hash = getSymbolHash(symbolName);
+            //         return mapper[hash] ?? defaultChunk;
+            //       } else {
+            //         return defaultChunk;
+            //       }
+            //     },
             prefetchStrategy: null,
             serverData: {
               // let's try to filter serverData in an analogous way as what we do in
@@ -183,7 +183,25 @@ export async function configureDevServer(
           res.setHeader('X-Powered-By', 'Qwik Vite Dev Server');
           res.writeHead(status);
 
-          const result = await render(renderOpts);
+          const serializedRenderOpts = JSON.parse(JSON.stringify(renderOpts));
+          // stream and symbolMapper are necessary so let's put them back
+          serializedRenderOpts.stream = res;
+          serializedRenderOpts.symbolMapper = isClientDevOnly
+              ? undefined
+              : (symbolName: string, mapper: any) => {
+                  const defaultChunk = [
+                    symbolName,
+                    `/${srcBase}/${symbolName.toLowerCase()}.js`,
+                  ] as const;
+                  if (mapper) {
+                    const hash = getSymbolHash(symbolName);
+                    return mapper[hash] ?? defaultChunk;
+                  } else {
+                    return defaultChunk;
+                  }
+                };
+
+          const result = await render(serializedRenderOpts);
 
           // Sometimes new CSS files are added after the initial render
           Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
