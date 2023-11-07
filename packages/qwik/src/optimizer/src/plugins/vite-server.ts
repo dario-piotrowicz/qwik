@@ -134,27 +134,10 @@ export async function configureDevServer(
           // ev is not serializable so we need to remove it
           const { ev, ...serializableQwikcity } = qwikcity;
 
-          const { writable, readable } = new TransformStream();
-          const response = new Response(readable, {
-            headers: {
-              'Content-Type': 'text/html; charset=utf-8',
-            },
-          });
-          const writer = writable.getWriter();
-          const encoder = new TextEncoder();
-          const stream = {
-            write(chunk: any) {
-              writer.write(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
-            },
-            close() {
-              writer.close();
-            },
-          };
-
           const renderOpts: RenderToStreamOptions = {
             debug: true,
             locale: serverData.locale,
-            stream,
+            stream: res,
             snapshot: !isClientDevOnly,
             manifest: isClientDevOnly ? undefined : manifest,
             symbolMapper: isClientDevOnly
@@ -201,10 +184,6 @@ export async function configureDevServer(
           res.writeHead(status);
 
           const result = await render(renderOpts);
-
-          stream.close();
-          const txt = await response.text();
-          res.write(txt);
 
           // Sometimes new CSS files are added after the initial render
           Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
