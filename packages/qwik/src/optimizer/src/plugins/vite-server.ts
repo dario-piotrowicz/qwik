@@ -128,6 +128,12 @@ export async function configureDevServer(
             ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
             : 'src';
 
+          // qwikcity is not fully serializable so we need to extract it
+          const { qwikcity, ...serializableServerData } = serverData;
+
+          // ev is not serializable so we need to remove it
+          const { ev, ...serializableQwikcity } = qwikcity;
+
           const renderOpts: RenderToStreamOptions = {
             debug: true,
             locale: serverData.locale,
@@ -149,7 +155,23 @@ export async function configureDevServer(
                   }
                 },
             prefetchStrategy: null,
-            serverData,
+            serverData: {
+              // let's try to filter serverData in an analogous way as what we do in
+              // the qwik vite workerd experiment
+              ...serializableServerData,
+              qwikcity: serializableQwikcity,
+              ev: {
+                basePathname: ev.basePathname,
+                method: ev.method,
+                params: ev.params,
+                pathname: ev.pathname,
+                platform: {
+                  ssr: true,
+                  node: ev.platform.node,
+                },
+                url: ev.url
+              },
+            },
             containerAttributes: {
               ...serverData.containerAttributes,
             },
