@@ -22,7 +22,6 @@ export async function build(ctx: BuildContext) {
 }
 
 export async function updateBuildContext(ctx: BuildContext) {
-  // updating the build context
   if (!ctx.activeBuild) {
     ctx.activeBuild = new Promise<void>((resolve, reject) => {
       walkServerPlugins(ctx.opts)

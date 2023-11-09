@@ -109,6 +109,12 @@ export async function configureDevServer(
               }
             };
         renderOpts.stream = stream;
+        const newLoadedRouteModules = [];
+        for(const entry of renderOpts.serverData.qwikcity.loadedRoute[2]){
+          const mod = await __vite_ssr_dynamic_import__(entry.__filePath);
+          newLoadedRouteModules.push(mod);
+        }
+        renderOpts.serverData.qwikcity.loadedRoute[2] = newLoadedRouteModules;
       } catch (e) {
         renderOpts = null;
       }
@@ -245,8 +251,8 @@ export async function configureDevServer(
           headers: {},
         } as IncomingMessage;
         msg.method = 'GET';
-        msg.headers['x-workerd-rendering-opts'] = JSON.stringify(renderOpts);
-        
+        const serializedRenderOpts = JSON.stringify(renderOpts);
+        msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
         msg.url = req.url;
 
         const resp = await workerdHandler(msg);

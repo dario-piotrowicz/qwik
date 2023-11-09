@@ -103,15 +103,26 @@ export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
           const route = routeResult.route;
           params = routeResult.params;
 
+          const pushModuleWithFilePath = (filePath: string, module: RouteModule) => {
+            // routeModules needs to contain the modules as those are still needed in the
+            // rest of the middleware here, but such modules can't be serialized so we have
+            // no way of passing them to workerd, so let's just add an extra __filePath field
+            // here so that we re-initialize the module in workerd based on the filePath
+            routeModules.push({
+              ...module,
+              __filePath: filePath,
+            } as RouteModule);
+          }
+
           // found a matching route
           for (const layout of route.layouts) {
             const layoutModule = await server.ssrLoadModule(layout.filePath);
-            routeModules.push(layoutModule);
+            pushModuleWithFilePath(layout.filePath, layoutModule);
             routeModulePaths.set(layoutModule, layout.filePath);
             checkModule(loaderMap, layoutModule, layout.filePath);
           }
           const endpointModule = await server.ssrLoadModule(route.filePath);
-          routeModules.push(endpointModule);
+          pushModuleWithFilePath(route.filePath, endpointModule);
           routeModulePaths.set(endpointModule, route.filePath);
           checkModule(loaderMap, endpointModule, route.filePath);
         }
