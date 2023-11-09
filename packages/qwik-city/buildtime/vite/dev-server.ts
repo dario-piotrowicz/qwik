@@ -59,8 +59,6 @@ export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
         return;
       }
 
-      console.log(`\x1b[35m [qwikCity middleware] handling request for ${req.url} \x1b[0m`);
-
       const url = getUrl(req, computeOrigin(req));
 
       if (skipRequest(url.pathname) || isVitePing(url.pathname, req.headers)) {

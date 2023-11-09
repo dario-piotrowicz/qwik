@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-// import type { /*Render,*/ RenderToStreamOptions } from '@builder.io/qwik/server';
 import { magenta } from 'kleur/colors';
 import type { IncomingMessage, ServerResponse } from 'http';
 
@@ -15,6 +14,7 @@ import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
 
 import { createWorkerdHandler } from 'workerd-vite-utils';
+import { RequestEvLoaders, RequestEvMode, RequestEvQwikSerializer, RequestEvRoute, RequestEvTrailingSlash } from 'packages/qwik-city/middleware/request-handler/request-event';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -59,15 +59,9 @@ export async function configureDevServer(
   : 'src';
 
   const workerdHandler = createWorkerdHandler({
-    entrypoint: opts.input[0], // './src/entry.ssr.tsx',
+    entrypoint: opts.input[0],
     server: server as any,
     frameworkRequestHandlingJs: `
-      // return new Response(JSON.stringify({
-      //   html: 'this is a test'
-      // }));
-      const url = request.url;
-      // const renderedString = entryPoint.render(url);
-
       const { writable, readable } = new TransformStream();
       const response = new Response(readable, {
         headers: {
@@ -199,61 +193,14 @@ export async function configureDevServer(
           });
         });
 
-        // const srcBase = opts.srcDir
-        //   ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-        //   : 'src';
-
-        // qwikcity is not fully serializable so we need to extract it
-        const { qwikcity, ...serializableServerData } = serverData;
-
-        // ev is not serializable so we need to remove it
-        const { ev, ...serializableQwikcity } = qwikcity;
-
-        // NOTE: we can only pass serializable things to workerd so not all fields of renderOpts are allowed
-        const renderOpts: any = { // RenderToStreamOptions
-          debug: true,
-          locale: serverData.locale,
-          snapshot: !isClientDevOnly,
-          manifest: isClientDevOnly ? undefined : manifest,
-          prefetchStrategy: null,
-          serverData: {
-            ...serializableServerData,
-            qwikcity: serializableQwikcity,
-            ev: {
-              // let's try to preserve the ev serializable data
-              '___@_RequestEvLoaders': ev['___@_RequestEvLoaders'],
-              '___@_RequestEvMode': ev['___@_RequestEvMode'],
-              '___@_RequestEvQwikSerializer': ev['___@_RequestEvQwikSerializer'],
-              '___@_RequestEvRoute' : ev['___@_RequestEvRoute'],
-              '___@_RequestEvTrailingSlash': ev['___@_RequestEvTrailingSlash'],
-              basePathname: ev.basePathname,
-              method: ev.method,
-              params: ev.params,
-              pathname: ev.pathname,
-              platform: {
-                ssr: true,
-                node: ev.platform.node,
-              },
-              url: ev.url
-            },
-          },
-          containerAttributes: {
-            ...serverData.containerAttributes,
-          },
-        };
-
-        // const ssrModule = await server.ssrLoadModule(opts.input[0]);
-
-        // const render: Render = ssrModule.default ?? ssrModule.render;
-        // const renderResult = await render(renderOpts);
-
         const msg = {
           headers: {},
         } as IncomingMessage;
-        msg.method = 'GET';
-        const serializedRenderOpts = JSON.stringify(renderOpts);
-        msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
         msg.url = req.url;
+        msg.method = 'GET';
+
+        const serializedRenderOpts = getSerializedRenderOpts(serverData, isClientDevOnly, manifest);
+        msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
 
         const resp = await workerdHandler(msg);
         // let's just read the whole stream here (this can be improved later)
@@ -283,6 +230,8 @@ export async function configureDevServer(
           });
 
           res.write(text);
+          // Qwik question: I haven't encountered this html field, in which cases it is used?
+          // (if it's needed we need to add this bit in the workerd code above)
           // End stream
           // if ('html' in renderResult) {
           //   res.write((renderResult as any).html);
@@ -504,3 +453,48 @@ export const getSymbolHash = (symbolName: string) => {
   }
   return symbolName;
 };
+
+/**
+ * renderOpts (of type RenderToStreamOptions) is not serializable so we need try to generate a
+ * serialized renderOpts (it needs to be serialized so that it can be passed to workerd) in the process
+ * we throw away anything that can't be serialized, the result seems to still produce a working app,
+ * but we do need to understand the implications here, are the things that we filter out here not
+ * needed for rendering the html?
+ */
+function getSerializedRenderOpts(serverData: Record<string, any>, isClientDevOnly: boolean, manifest: QwikManifest) {
+  const { qwikcity, ...serializableServerData } = serverData;
+  const { ev, ...serializableQwikcity } = qwikcity;
+
+  const renderOpts = {
+    debug: true,
+    locale: serverData.locale,
+    snapshot: !isClientDevOnly,
+    manifest: isClientDevOnly ? undefined : manifest,
+    prefetchStrategy: null,
+    serverData: {
+      ...serializableServerData,
+      qwikcity: serializableQwikcity,
+      ev: {
+        [RequestEvLoaders]: ev[RequestEvLoaders],
+        [RequestEvMode]: ev[RequestEvMode],
+        [RequestEvQwikSerializer]: ev[RequestEvQwikSerializer],
+        [RequestEvRoute]: ev[RequestEvRoute],
+        [RequestEvTrailingSlash]: ev[RequestEvTrailingSlash],
+        basePathname: ev.basePathname,
+        method: ev.method,
+        params: ev.params,
+        pathname: ev.pathname,
+        platform: {
+          ssr: true,
+          node: ev.platform.node,
+        },
+        url: ev.url
+      },
+    },
+    containerAttributes: {
+      ...serverData.containerAttributes,
+    },
+  };
+  const serializedRenderOpts = JSON.stringify(renderOpts);
+  return serializedRenderOpts;
+}
