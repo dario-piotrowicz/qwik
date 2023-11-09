@@ -62,12 +62,6 @@ export async function configureDevServer(
     entrypoint: opts.input[0], // './src/entry.ssr.tsx',
     server: server as any,
     frameworkRequestHandlingJs: `
-      // return new Response(JSON.stringify({
-      //   html: 'this is a test'
-      // }));
-      const url = request.url;
-      // const renderedString = entryPoint.render(url);
-
       const { writable, readable } = new TransformStream();
       const response = new Response(readable, {
         headers: {
@@ -122,15 +116,16 @@ export async function configureDevServer(
       const render = entryPoint.default ?? entryPoint.render;
 
       await render(renderOpts);
-      // const result = ctx.waitUntil(render(renderOpts));
 
-      stream.close();
+      ctx.waitUntil(new Promise(async resolve => {
+        await render(renderOpts);
+        stream.close();
+        resolve();
+      }));
 
       return response;
     `,
   });
-
-
 
   // qwik middleware injected BEFORE vite internal middlewares
   server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -199,10 +194,6 @@ export async function configureDevServer(
           });
         });
 
-        // const srcBase = opts.srcDir
-        //   ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-        //   : 'src';
-
         // qwikcity is not fully serializable so we need to extract it
         const { qwikcity, ...serializableServerData } = serverData;
 
@@ -241,11 +232,6 @@ export async function configureDevServer(
             ...serverData.containerAttributes,
           },
         };
-
-        // const ssrModule = await server.ssrLoadModule(opts.input[0]);
-
-        // const render: Render = ssrModule.default ?? ssrModule.render;
-        // const renderResult = await render(renderOpts);
 
         const msg = {
           headers: {},
