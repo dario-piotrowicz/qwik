@@ -27,7 +27,7 @@ import type { QwikManifest, ResolvedManifest } from '@builder.io/qwik/optimizer'
 import { IsQData, QDATA_JSON, QDATA_JSON_LEN } from './user-response';
 import { isPromise } from './../../runtime/src/utils';
 
-// These can't be symbols as we want to serialize things as we need to use them to workerd
+// These can't be symbols as we want things to be serializable so that need can send them to workerd
 export const RequestEvLoaders = '___@_RequestEvLoaders';
 export const RequestEvMode = '___@_RequestEvMode';
 export const RequestEvRoute = '___@_RequestEvRoute';
