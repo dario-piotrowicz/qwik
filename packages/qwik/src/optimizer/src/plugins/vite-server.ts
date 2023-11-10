@@ -14,7 +14,13 @@ import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
 
 import { createWorkerdHandler } from 'workerd-vite-utils';
-import { RequestEvLoaders, RequestEvMode, RequestEvQwikSerializer, RequestEvRoute, RequestEvTrailingSlash } from 'packages/qwik-city/middleware/request-handler/request-event';
+import {
+  RequestEvLoaders,
+  RequestEvMode,
+  RequestEvQwikSerializer,
+  RequestEvRoute,
+  RequestEvTrailingSlash,
+} from 'packages/qwik-city/middleware/request-handler/request-event';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -55,13 +61,13 @@ export async function configureDevServer(
   }
 
   const srcBase = opts.srcDir
-  ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-  : 'src';
+    ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+    : 'src';
 
   const workerdHandler = createWorkerdHandler({
     entrypoint: opts.input[0],
     server: server as any,
-    frameworkRequestHandlingJs: `
+    requestHandler: async ({ entrypointModule, request }) => {
       const { writable, readable } = new TransformStream();
       const response = new Response(readable, {
         headers: {
@@ -71,7 +77,7 @@ export async function configureDevServer(
       const writer = writable.getWriter();
       const encoder = new TextEncoder();
       const stream = {
-        write(chunk) {
+        write(chunk: any) {
           writer.write(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
         },
         close() {
@@ -82,29 +88,27 @@ export async function configureDevServer(
       let renderOpts = null;
       try {
         renderOpts = JSON.parse(request.headers.get('x-workerd-rendering-opts') ?? 'null');
-        const srcBase = ${JSON.stringify(srcBase)};
-        const getSymbolHash = (symbolName) => {
+        const getSymbolHash = (symbolName: string) => {
           const index = symbolName.lastIndexOf('_');
           if (index > -1) {
             return symbolName.slice(index + 1);
           }
           return symbolName;
         };
-        renderOpts.symbolMapper = (symbolName, mapper) => {
-              const defaultChunk = [
-                symbolName,
-                '/' + srcBase + '/' + symbolName.toLowerCase() + '.js',
-              ];
-              if (mapper) {
-                const hash = getSymbolHash(symbolName);
-                return mapper[hash] ?? defaultChunk;
-              } else {
-                return defaultChunk;
-              }
-            };
+        const srcBase = JSON.parse(request.headers.get('x-workerd-src-base') ?? 'null');
+        renderOpts.symbolMapper = (symbolName: string, mapper: Record<string, unknown>) => {
+          const defaultChunk = [symbolName, '/' + srcBase + '/' + symbolName.toLowerCase() + '.js'];
+          if (mapper) {
+            const hash = getSymbolHash(symbolName);
+            return mapper[hash] ?? defaultChunk;
+          } else {
+            return defaultChunk;
+          }
+        };
         renderOpts.stream = stream;
         const newLoadedRouteModules = [];
-        for(const entry of renderOpts.serverData.qwikcity.loadedRoute[2]){
+        for (const entry of renderOpts.serverData.qwikcity.loadedRoute[2]) {
+          //@ts-ignore
           const mod = await __vite_ssr_dynamic_import__(entry.__filePath);
           newLoadedRouteModules.push(mod);
         }
@@ -113,7 +117,7 @@ export async function configureDevServer(
         renderOpts = null;
       }
 
-      const render = entryPoint.default ?? entryPoint.render;
+      const render = entrypointModule.default ?? entrypointModule.render;
 
       await render(renderOpts);
       // const result = ctx.waitUntil(render(renderOpts));
@@ -121,10 +125,8 @@ export async function configureDevServer(
       stream.close();
 
       return response;
-    `,
+    },
   });
-
-
 
   // qwik middleware injected BEFORE vite internal middlewares
   server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -201,6 +203,7 @@ export async function configureDevServer(
 
         const serializedRenderOpts = getSerializedRenderOpts(serverData, isClientDevOnly, manifest);
         msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
+        msg.headers['x-workerd-src-base'] = JSON.stringify(srcBase);
 
         const resp = await workerdHandler(msg);
         // let's just read the whole stream here (this can be improved later)
@@ -455,13 +458,17 @@ export const getSymbolHash = (symbolName: string) => {
 };
 
 /**
- * renderOpts (of type RenderToStreamOptions) is not serializable so we need try to generate a
- * serialized renderOpts (it needs to be serialized so that it can be passed to workerd) in the process
- * we throw away anything that can't be serialized, the result seems to still produce a working app,
- * but we do need to understand the implications here, are the things that we filter out here not
- * needed for rendering the html?
+ * RenderOpts (of type RenderToStreamOptions) is not serializable so we need try to generate a
+ * serialized renderOpts (it needs to be serialized so that it can be passed to workerd) in the
+ * process we throw away anything that can't be serialized, the result seems to still produce a
+ * working app, but we do need to understand the implications here, are the things that we filter
+ * out here not needed for rendering the html?
  */
-function getSerializedRenderOpts(serverData: Record<string, any>, isClientDevOnly: boolean, manifest: QwikManifest) {
+function getSerializedRenderOpts(
+  serverData: Record<string, any>,
+  isClientDevOnly: boolean,
+  manifest: QwikManifest
+) {
   const { qwikcity, ...serializableServerData } = serverData;
   const { ev, ...serializableQwikcity } = qwikcity;
 
@@ -488,7 +495,7 @@ function getSerializedRenderOpts(serverData: Record<string, any>, isClientDevOnl
           ssr: true,
           node: ev.platform.node,
         },
-        url: ev.url
+        url: ev.url,
       },
     },
     containerAttributes: {
