@@ -13,7 +13,6 @@ import clickToComponent from './click-to-component.html?raw';
 import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
 
-import { createWorkerdHandler } from 'workerd-vite-utils';
 import {
   RequestEvLoaders,
   RequestEvMode,
@@ -21,6 +20,7 @@ import {
   RequestEvRoute,
   RequestEvTrailingSlash,
 } from 'packages/qwik-city/middleware/request-handler/request-event';
+import { getWorkerdHandler } from './workerd-integration';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -64,69 +64,7 @@ export async function configureDevServer(
     ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
     : 'src';
 
-  const workerdHandler = createWorkerdHandler({
-    entrypoint: opts.input[0],
-    server: server as any,
-    requestHandler: async ({ entrypointModule, request }) => {
-      const { writable, readable } = new TransformStream();
-      const response = new Response(readable, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-      });
-      const writer = writable.getWriter();
-      const encoder = new TextEncoder();
-      const stream = {
-        write(chunk: any) {
-          writer.write(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
-        },
-        close() {
-          writer.close();
-        },
-      };
-
-      let renderOpts = null;
-      try {
-        renderOpts = JSON.parse(request.headers.get('x-workerd-rendering-opts') ?? 'null');
-        const getSymbolHash = (symbolName: string) => {
-          const index = symbolName.lastIndexOf('_');
-          if (index > -1) {
-            return symbolName.slice(index + 1);
-          }
-          return symbolName;
-        };
-        const srcBase = JSON.parse(request.headers.get('x-workerd-src-base') ?? 'null');
-        renderOpts.symbolMapper = (symbolName: string, mapper: Record<string, unknown>) => {
-          const defaultChunk = [symbolName, '/' + srcBase + '/' + symbolName.toLowerCase() + '.js'];
-          if (mapper) {
-            const hash = getSymbolHash(symbolName);
-            return mapper[hash] ?? defaultChunk;
-          } else {
-            return defaultChunk;
-          }
-        };
-        renderOpts.stream = stream;
-        const newLoadedRouteModules = [];
-        for (const entry of renderOpts.serverData.qwikcity.loadedRoute[2]) {
-          //@ts-ignore
-          const mod = await __vite_ssr_dynamic_import__(entry.__filePath);
-          newLoadedRouteModules.push(mod);
-        }
-        renderOpts.serverData.qwikcity.loadedRoute[2] = newLoadedRouteModules;
-      } catch (e) {
-        renderOpts = null;
-      }
-
-      const render = entrypointModule.default ?? entrypointModule.render;
-
-      await render(renderOpts);
-      // const result = ctx.waitUntil(render(renderOpts));
-
-      stream.close();
-
-      return response;
-    },
-  });
+  const workerdHandler = getWorkerdHandler(opts, server);
 
   // qwik middleware injected BEFORE vite internal middlewares
   server.middlewares.use(async (req: any, res: any, next: any) => {
