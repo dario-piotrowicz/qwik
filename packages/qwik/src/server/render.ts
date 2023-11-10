@@ -242,7 +242,7 @@ export async function renderToStream(
     },
     _symbols: renderSymbols,
     stream,
-  } as RenderToStreamResult;
+  };
   return result;
 }
 

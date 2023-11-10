@@ -79,6 +79,7 @@ export interface RenderToStreamResult extends RenderResult {
     render: number;
     snapshot: number;
   };
+  stream?: StreamWriter;
 }
 
 /** @public */
