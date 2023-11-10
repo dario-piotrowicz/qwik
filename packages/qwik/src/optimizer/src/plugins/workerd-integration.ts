@@ -28,9 +28,11 @@ export function getWorkerdHandler(
 async function requestHandler({
   entrypointModule,
   request,
+  context,
 }: {
   entrypointModule: any;
   request: Request;
+  context: { waitUntil: (p: Promise<unknown>) => void }
 }) {
   const { writable, readable } = new TransformStream();
   const response = new Response(readable, {
@@ -83,9 +85,11 @@ async function requestHandler({
 
   const render = entrypointModule.default ?? entrypointModule.render;
 
-  await render(renderOpts);
-  // const result = ctx.waitUntil(render(renderOpts));
-  stream.close();
+  // Note: this is unlikely to be the correct behavior, can we indeed close
+  // the stream as soon as the render function completes?
+  const renderPromise = render(renderOpts).finally(() => stream.close());
+
+  context.waitUntil(renderPromise);
 
   return response;
 }
