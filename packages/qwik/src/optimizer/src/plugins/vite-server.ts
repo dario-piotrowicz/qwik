@@ -60,10 +60,6 @@ export async function configureDevServer(
     }
   }
 
-  const srcBase = opts.srcDir
-    ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-    : 'src';
-
   const workerdHandler = getWorkerdHandler(opts, server);
 
   // qwik middleware injected BEFORE vite internal middlewares
@@ -138,6 +134,10 @@ export async function configureDevServer(
         } as IncomingMessage;
         msg.url = req.url;
         msg.method = 'GET';
+
+        const srcBase = opts.srcDir
+          ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+          : 'src';
 
         const serializedRenderOpts = getSerializedRenderOpts(serverData, isClientDevOnly, manifest);
         msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
