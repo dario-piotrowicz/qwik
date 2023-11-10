@@ -3,6 +3,15 @@ import type { NormalizedQwikPluginOptions } from './plugin';
 import type { ViteDevServer } from 'vite';
 import type { IncomingMessage } from 'node:http';
 
+import {
+  RequestEvLoaders,
+  RequestEvMode,
+  RequestEvQwikSerializer,
+  RequestEvRoute,
+  RequestEvTrailingSlash,
+} from 'packages/qwik-city/middleware/request-handler/request-event';
+import type { Path, QwikManifest } from '../types';
+
 export function getWorkerdHandler(
   opts: NormalizedQwikPluginOptions,
   server: ViteDevServer
@@ -79,4 +88,77 @@ async function requestHandler({
   stream.close();
 
   return response;
+}
+
+export function createWorkerdIncomingMessage(
+  req: any,
+  opts: NormalizedQwikPluginOptions,
+  path: Path,
+  serverData: Record<string, any>,
+  isClientDevOnly: boolean,
+  manifest: QwikManifest
+) {
+  const msg = {
+    headers: {},
+  } as IncomingMessage;
+  msg.url = req.url;
+  msg.method = 'GET';
+
+  const srcBase = opts.srcDir
+    ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+    : 'src';
+
+  const serializedRenderOpts = getSerializedRenderOpts(serverData, isClientDevOnly, manifest);
+  msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
+  msg.headers['x-workerd-src-base'] = JSON.stringify(srcBase);
+  return msg;
+}
+
+/**
+ * RenderOpts (of type RenderToStreamOptions) is not serializable so we need try to generate a
+ * serialized renderOpts (it needs to be serialized so that it can be passed to workerd) in the
+ * process we throw away anything that can't be serialized, the result seems to still produce a
+ * working app, but we do need to understand the implications here, are the things that we filter
+ * out here not needed for rendering the html?
+ */
+function getSerializedRenderOpts(
+  serverData: Record<string, any>,
+  isClientDevOnly: boolean,
+  manifest: QwikManifest
+) {
+  const { qwikcity, ...serializableServerData } = serverData;
+  const { ev, ...serializableQwikcity } = qwikcity;
+
+  const renderOpts = {
+    debug: true,
+    locale: serverData.locale,
+    snapshot: !isClientDevOnly,
+    manifest: isClientDevOnly ? undefined : manifest,
+    prefetchStrategy: null,
+    serverData: {
+      ...serializableServerData,
+      qwikcity: serializableQwikcity,
+      ev: {
+        [RequestEvLoaders]: ev[RequestEvLoaders],
+        [RequestEvMode]: ev[RequestEvMode],
+        [RequestEvQwikSerializer]: ev[RequestEvQwikSerializer],
+        [RequestEvRoute]: ev[RequestEvRoute],
+        [RequestEvTrailingSlash]: ev[RequestEvTrailingSlash],
+        basePathname: ev.basePathname,
+        method: ev.method,
+        params: ev.params,
+        pathname: ev.pathname,
+        platform: {
+          ssr: true,
+          node: ev.platform.node,
+        },
+        url: ev.url,
+      },
+    },
+    containerAttributes: {
+      ...serverData.containerAttributes,
+    },
+  };
+  const serializedRenderOpts = JSON.stringify(renderOpts);
+  return serializedRenderOpts;
 }
