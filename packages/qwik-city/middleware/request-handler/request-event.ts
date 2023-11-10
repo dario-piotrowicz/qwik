@@ -28,11 +28,11 @@ import { IsQData, QDATA_JSON, QDATA_JSON_LEN } from './user-response';
 import { isPromise } from './../../runtime/src/utils';
 
 // These can't be symbols as we want things to be serializable so that need can send them to workerd
-export const RequestEvLoaders = '___@_RequestEvLoaders';
-export const RequestEvMode = '___@_RequestEvMode';
-export const RequestEvRoute = '___@_RequestEvRoute';
-export const RequestEvQwikSerializer = '___@_RequestEvQwikSerializer';
-export const RequestEvTrailingSlash = '___@_RequestEvTrailingSlash';
+export const RequestEvLoaders = '@RequestEvLoaders';
+export const RequestEvMode = '@RequestEvMode';
+export const RequestEvRoute = '@RequestEvRoute';
+export const RequestEvQwikSerializer = '@RequestEvQwikSerializer';
+export const RequestEvTrailingSlash = '@RequestEvTrailingSlash';
 
 export const RequestRouteName = '@routeName';
 export const RequestEvSharedActionId = '@actionId';
