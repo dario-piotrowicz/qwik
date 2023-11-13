@@ -12,8 +12,7 @@ import imageDevTools from './image-size-runtime.html?raw';
 import clickToComponent from './click-to-component.html?raw';
 import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
-
-import { createWorkerdIncomingMessage, getWorkerdHandler } from './workerd-integration';
+import { getSerializedRenderOpts, getWorkerdFunctions } from './workerd-integration';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -53,7 +52,7 @@ export async function configureDevServer(
     }
   }
 
-  const workerdHandler = getWorkerdHandler(opts, server);
+  const { renderApp } = getWorkerdFunctions(server);
 
   // qwik middleware injected BEFORE vite internal middlewares
   server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -122,20 +121,15 @@ export async function configureDevServer(
           });
         });
 
-        const msg = createWorkerdIncomingMessage(
-          req,
-          opts,
-          path,
-          serverData,
-          isClientDevOnly,
-          manifest
-        );
+        const srcBase = opts.srcDir
+          ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+          : 'src';
 
-        const resp = await workerdHandler(msg);
-        // let's just read the whole stream here (this can be improved later)
-        const text = await resp.text();
-
-        const renderResult = resp;
+        const renderResult = await renderApp({
+          entryPoint: opts.input[0],
+          renderOpts: getSerializedRenderOpts(serverData, isClientDevOnly, manifest),
+          srcBase,
+        });
 
         if (renderResult) {
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -158,7 +152,7 @@ export async function configureDevServer(
             });
           });
 
-          res.write(text);
+          res.write(renderResult);
           // Qwik question: I haven't encountered this html field, in which cases it is used?
           // (if it's needed we need to add this bit in the workerd code above)
           // End stream

@@ -1,7 +1,5 @@
-import { createWorkerdHandler } from 'workerd-vite-utils';
-import type { NormalizedQwikPluginOptions } from './plugin';
+import { createWorkerdViteFunctions, type WorkerdFunctions } from 'workerd-vite-utils';
 import type { ViteDevServer } from 'vite';
-import type { IncomingMessage } from 'node:http';
 
 import {
   RequestEvLoaders,
@@ -10,112 +8,85 @@ import {
   RequestEvRoute,
   RequestEvTrailingSlash,
 } from 'packages/qwik-city/middleware/request-handler/request-event';
-import type { Path, QwikManifest } from '../types';
+import type { QwikManifest } from '../types';
 
-export function getWorkerdHandler(
-  opts: NormalizedQwikPluginOptions,
-  server: ViteDevServer
-): (request: IncomingMessage) => Promise<Response> {
-  const workerdHandler = createWorkerdHandler({
-    entrypoint: opts.input[0],
-    server: server as any,
-    requestHandler,
-  });
+let workerdFunctions: ReturnType<typeof createWorkerdViteFunctions> | null = null;
 
-  return workerdHandler as unknown as (request: IncomingMessage) => Promise<Response>;
-}
+export function getWorkerdFunctions(server: ViteDevServer): WorkerdFunctions {
+  if (!workerdFunctions) {
+    workerdFunctions = createWorkerdViteFunctions({
+      server: server as any,
+      functions: {
+        renderApp: async ({ data, viteImport, ctx }) => {
+          const { entryPoint, renderOpts, srcBase } = data as {
+            entryPoint: string;
+            renderOpts: any;
+            srcBase: string;
+          };
+          const entrypointModule = (await viteImport(entryPoint)) as {
+            default?: (renderOpts: any) => Promise<void>;
+            render?: (renderOpts: any) => Promise<void>;
+          };
 
-async function requestHandler({
-  entrypointModule,
-  request,
-  context,
-}: {
-  entrypointModule: any;
-  request: Request;
-  context: { waitUntil: (p: Promise<unknown>) => void }
-}) {
-  const { writable, readable } = new TransformStream();
-  const response = new Response(readable, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-    },
-  });
-  const writer = writable.getWriter();
-  const encoder = new TextEncoder();
-  const stream = {
-    write(chunk: any) {
-      writer.write(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
-    },
-    close() {
-      writer.close();
-    },
-  };
+          const { writable, readable } = new TransformStream();
+          const response = new Response(readable, {
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+            },
+          });
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+          const stream = {
+            write(chunk: any) {
+              writer.write(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
+            },
+            close() {
+              writer.close();
+            },
+          };
 
-  let renderOpts = null;
-  try {
-    renderOpts = JSON.parse(request.headers.get('x-workerd-rendering-opts') ?? 'null');
-    const getSymbolHash = (symbolName: string) => {
-      const index = symbolName.lastIndexOf('_');
-      if (index > -1) {
-        return symbolName.slice(index + 1);
-      }
-      return symbolName;
-    };
-    const srcBase = JSON.parse(request.headers.get('x-workerd-src-base') ?? 'null');
-    renderOpts.symbolMapper = (symbolName: string, mapper: Record<string, unknown>) => {
-      const defaultChunk = [symbolName, '/' + srcBase + '/' + symbolName.toLowerCase() + '.js'];
-      if (mapper) {
-        const hash = getSymbolHash(symbolName);
-        return mapper[hash] ?? defaultChunk;
-      } else {
-        return defaultChunk;
-      }
-    };
-    renderOpts.stream = stream;
-    const newLoadedRouteModules = [];
-    for (const entry of renderOpts.serverData.qwikcity.loadedRoute[2]) {
-      //@ts-ignore
-      const mod = await __vite_ssr_dynamic_import__(entry.__filePath);
-      newLoadedRouteModules.push(mod);
-    }
-    renderOpts.serverData.qwikcity.loadedRoute[2] = newLoadedRouteModules;
-  } catch (e) {
-    renderOpts = null;
+          const getSymbolHash = (symbolName: string) => {
+            const index = symbolName.lastIndexOf('_');
+            if (index > -1) {
+              return symbolName.slice(index + 1);
+            }
+            return symbolName;
+          };
+          renderOpts.symbolMapper = (symbolName: string, mapper: Record<string, unknown>) => {
+            const defaultChunk = [
+              symbolName,
+              '/' + srcBase + '/' + symbolName.toLowerCase() + '.js',
+            ];
+            if (mapper) {
+              const hash = getSymbolHash(symbolName);
+              return mapper[hash] ?? defaultChunk;
+            } else {
+              return defaultChunk;
+            }
+          };
+          renderOpts.stream = stream;
+          const newLoadedRouteModules = [];
+          for (const entry of renderOpts.serverData.qwikcity.loadedRoute[2]) {
+            const mod = await viteImport(entry.__filePath);
+            newLoadedRouteModules.push(mod);
+          }
+          renderOpts.serverData.qwikcity.loadedRoute[2] = newLoadedRouteModules;
+
+          const render = entrypointModule.default ?? entrypointModule.render;
+
+          // Note: this is unlikely to be the correct behavior, can we indeed close
+          // the stream as soon as the render function completes?
+          const renderPromise = render!(renderOpts).finally(() => stream.close());
+
+          ctx.waitUntil(renderPromise);
+
+          const html = await response.text();
+          return html;
+        },
+      },
+    });
   }
-
-  const render = entrypointModule.default ?? entrypointModule.render;
-
-  // Note: this is unlikely to be the correct behavior, can we indeed close
-  // the stream as soon as the render function completes?
-  const renderPromise = render(renderOpts).finally(() => stream.close());
-
-  context.waitUntil(renderPromise);
-
-  return response;
-}
-
-export function createWorkerdIncomingMessage(
-  req: any,
-  opts: NormalizedQwikPluginOptions,
-  path: Path,
-  serverData: Record<string, any>,
-  isClientDevOnly: boolean,
-  manifest: QwikManifest
-) {
-  const msg = {
-    headers: {},
-  } as IncomingMessage;
-  msg.url = req.url;
-  msg.method = 'GET';
-
-  const srcBase = opts.srcDir
-    ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-    : 'src';
-
-  const serializedRenderOpts = getSerializedRenderOpts(serverData, isClientDevOnly, manifest);
-  msg.headers['x-workerd-rendering-opts'] = serializedRenderOpts;
-  msg.headers['x-workerd-src-base'] = JSON.stringify(srcBase);
-  return msg;
+  return workerdFunctions;
 }
 
 /**
@@ -125,7 +96,7 @@ export function createWorkerdIncomingMessage(
  * working app, but we do need to understand the implications here, are the things that we filter
  * out here not needed for rendering the html?
  */
-function getSerializedRenderOpts(
+export function getSerializedRenderOpts(
   serverData: Record<string, any>,
   isClientDevOnly: boolean,
   manifest: QwikManifest
@@ -163,6 +134,6 @@ function getSerializedRenderOpts(
       ...serverData.containerAttributes,
     },
   };
-  const serializedRenderOpts = JSON.stringify(renderOpts);
+  const serializedRenderOpts = JSON.parse(JSON.stringify(renderOpts));
   return serializedRenderOpts;
 }
