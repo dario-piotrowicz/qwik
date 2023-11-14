@@ -233,23 +233,12 @@ export function actionsMiddleware(routeLoaders: LoaderInternal[], routeActions: 
                 if (isDev) {
                   return measure(requestEv, loader.__qrl.getSymbol().split('_', 1)[0], async () => {
                     const runLoader = (globalThis as any).runLoader;
-                    try {
-                      const loaderResult = await runLoader({
-                        loaderName: (loader as any).__loaderName,
-                        moduleFilePath: (loader as any).__moduleFilePath,
-                        requestEv: serializeRequestEv(requestEv),
-                      });
-                      /* eslint-disable no-console */
-                      console.log(`\x1b[32m using workerd loader! \x1b[0m`);
-                      console.log(`\x1b[32m result: ${JSON.stringify(loaderResult)} \x1b[0m`);
-                      return loaderResult;
-                    } catch (e: unknown) {
-                      console.log(`\x1b[31m workerd loader failed falling back to vite loader \x1b[0m`);
-                      console.log(`\x1b[31m errror: ${ e instanceof Error ? e.message : e} \x1b[0m`);
-                      const returnValue = await loader.__qrl.call(requestEv, requestEv as any);
-                      return returnValue;
-                      /* eslint-enable no-console */
-                    }
+                    const loaderResult = await runLoader({
+                      loaderName: (loader as any).__loaderName,
+                      moduleFilePath: (loader as any).__moduleFilePath,
+                      requestEv: serializeRequestEv(requestEv)
+                    });
+                    return loaderResult;
                   });
                 } else {
                   return loader.__qrl.call(requestEv, requestEv as any);

@@ -90,9 +90,25 @@ export function getWorkerdFunctions(server: ViteDevServer): WorkerdFunctions {
             ...env,
           };
 
-          const mod: any = await viteImport(moduleFilePath);
+          let loader: any;
 
-          const loader = mod[loaderName];
+          // viteImport requires all the middlewares to be already installed, this might not be
+          // the case for the very first request, so let's attempt the import a few times so be
+          // sure (note: this is an ugly workaround just a POC)
+          for(const attempt of [0, 1, 2]) {
+            const mod: any = await viteImport(moduleFilePath);
+            loader = mod[loaderName];
+
+            if(loader) {
+              break;
+            }
+
+            if(attempt === 2) {
+              return 'Error: failed to import loader!';
+            } else {
+              new Promise(resolve => setTimeout(resolve, 200));
+            }
+          }
 
           const result = await loader.__qrl.call(requestEv, requestEv);
 
