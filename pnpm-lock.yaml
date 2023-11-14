@@ -192,6 +192,9 @@ importers:
       which-pm-runs:
         specifier: 1.1.0
         version: 1.1.0
+      workerd-vite-utils:
+        specifier: /Users/dario/Repos/my-repos/preact-vite-workerd-ssr/workerd-vite-utils
+        version: link:../preact-vite-workerd-ssr/workerd-vite-utils
       zod:
         specifier: ^3.22.4
         version: 3.22.4
@@ -586,6 +589,9 @@ importers:
       mdast-util-mdx:
         specifier: ^3.0.0
         version: 3.0.0
+      miniflare:
+        specifier: https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322
+        version: '@prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322'
       refractor:
         specifier: 4.8.1
         version: 4.8.1
@@ -616,6 +622,9 @@ importers:
       uvu:
         specifier: 0.5.6
         version: 0.5.6
+      workerd-vite-utils:
+        specifier: /Users/dario/Repos/my-repos/preact-vite-workerd-ssr/workerd-vite-utils
+        version: link:../../../preact-vite-workerd-ssr/workerd-vite-utils
       yaml:
         specifier: ^2.3.2
         version: 2.3.2
@@ -18901,7 +18910,7 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
   '@prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322':
-    resolution: {registry: https://registry.npmjs.org/, tarball: https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322}
+    resolution: {tarball: https://prerelease-registry.devprod.cloudflare.dev/workers-sdk/runs/6732252267/npm-package-miniflare-4322}
     name: miniflare
     version: 0.0.0-f8cf5e89
     engines: {node: '>=16.13'}

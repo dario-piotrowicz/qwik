@@ -86,7 +86,8 @@
     "vitest": "0.34.6",
     "watchlist": "0.3.1",
     "which-pm-runs": "1.1.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "workerd-vite-utils": "/Users/dario/Repos/my-repos/preact-vite-workerd-ssr/workerd-vite-utils"
   },
   "engines": {
     "node": ">=16.8.0 <18.0.0 || >=18.11",

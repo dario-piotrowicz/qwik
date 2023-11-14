@@ -1,0 +1,1 @@
+export { getWorkerdFunctions } from '../../../workerd-integration';
