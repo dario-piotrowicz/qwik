@@ -27,11 +27,13 @@ import type { QwikManifest, ResolvedManifest } from '@builder.io/qwik/optimizer'
 import { IsQData, QDATA_JSON, QDATA_JSON_LEN } from './user-response';
 import { isPromise } from './../../runtime/src/utils';
 
-const RequestEvLoaders = Symbol('RequestEvLoaders');
-const RequestEvMode = Symbol('RequestEvMode');
-const RequestEvRoute = Symbol('RequestEvRoute');
-export const RequestEvQwikSerializer = Symbol('RequestEvQwikSerializer');
-export const RequestEvTrailingSlash = Symbol('RequestEvTrailingSlash');
+// These can't be symbols as we want things to be serializable so that need can send them to workerd
+export const RequestEvLoaders = '@RequestEvLoaders';
+export const RequestEvMode = '@RequestEvMode';
+export const RequestEvRoute = '@RequestEvRoute';
+export const RequestEvQwikSerializer = '@RequestEvQwikSerializer';
+export const RequestEvTrailingSlash = '@RequestEvTrailingSlash';
+
 export const RequestRouteName = '@routeName';
 export const RequestEvSharedActionId = '@actionId';
 export const RequestEvSharedActionFormData = '@actionFormData';

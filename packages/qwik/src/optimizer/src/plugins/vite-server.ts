@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-import type { Render, RenderToStreamOptions } from '@builder.io/qwik/server';
 import { magenta } from 'kleur/colors';
 import type { IncomingMessage, ServerResponse } from 'http';
 
@@ -13,6 +12,7 @@ import imageDevTools from './image-size-runtime.html?raw';
 import clickToComponent from './click-to-component.html?raw';
 import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
+import { getWorkerdFunctions, serializeRequestEv, setWorkerdFunctions } from 'packages/workerd-integration';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -34,6 +34,8 @@ export async function configureDevServer(
   isClientDevOnly: boolean,
   clientDevInput: string | undefined
 ) {
+  setWorkerdFunctions(server);
+
   if (typeof fetch !== 'function' && sys.env === 'node') {
     // polyfill fetch() when not available in Node.js
 
@@ -83,85 +85,59 @@ export async function configureDevServer(
           return;
         }
 
-        const ssrModule = await server.ssrLoadModule(opts.input[0]);
+        const manifest: QwikManifest = {
+          manifestHash: '',
+          symbols: {},
+          mapping: {},
+          bundles: {},
+          injections: [],
+          version: '1',
+        };
 
-        const render: Render = ssrModule.default ?? ssrModule.render;
+        const added = new Set();
+        Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
+          entry[1].forEach((v) => {
+            const hook = v.info?.meta?.hook;
+            let url = v.url;
+            if (v.lastHMRTimestamp) {
+              url += `?t=${v.lastHMRTimestamp}`;
+            }
+            if (hook) {
+              manifest.mapping[hook.name] = relativeURL(url, opts.rootDir);
+            }
 
-        if (typeof render === 'function') {
-          const manifest: QwikManifest = {
-            manifestHash: '',
-            symbols: {},
-            mapping: {},
-            bundles: {},
-            injections: [],
-            version: '1',
-          };
-
-          const added = new Set();
-          Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
-            entry[1].forEach((v) => {
-              const hook = v.info?.meta?.hook;
-              let url = v.url;
-              if (v.lastHMRTimestamp) {
-                url += `?t=${v.lastHMRTimestamp}`;
-              }
-              if (hook) {
-                manifest.mapping[hook.name] = relativeURL(url, opts.rootDir);
-              }
-
-              const { pathId, query } = parseId(v.url);
-              if (query === '' && ['.css', '.scss', '.sass'].some((ext) => pathId.endsWith(ext))) {
-                added.add(v.url);
-                manifest.injections!.push({
-                  tag: 'link',
-                  location: 'head',
-                  attributes: {
-                    rel: 'stylesheet',
-                    href: url,
-                  },
-                });
-              }
-            });
-          });
-
-          const srcBase = opts.srcDir
-            ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
-            : 'src';
-
-          const renderOpts: RenderToStreamOptions = {
-            debug: true,
-            locale: serverData.locale,
-            stream: res,
-            snapshot: !isClientDevOnly,
-            manifest: isClientDevOnly ? undefined : manifest,
-            symbolMapper: isClientDevOnly
-              ? undefined
-              : (symbolName, mapper) => {
-                  const defaultChunk = [
-                    symbolName,
-                    `/${srcBase}/${symbolName.toLowerCase()}.js`,
-                  ] as const;
-                  if (mapper) {
-                    const hash = getSymbolHash(symbolName);
-                    return mapper[hash] ?? defaultChunk;
-                  } else {
-                    return defaultChunk;
-                  }
+            const { pathId, query } = parseId(v.url);
+            if (query === '' && ['.css', '.scss', '.sass'].some((ext) => pathId.endsWith(ext))) {
+              added.add(v.url);
+              manifest.injections!.push({
+                tag: 'link',
+                location: 'head',
+                attributes: {
+                  rel: 'stylesheet',
+                  href: url,
                 },
-            prefetchStrategy: null,
-            serverData,
-            containerAttributes: {
-              ...serverData.containerAttributes,
-            },
-          };
+              });
+            }
+          });
+        });
 
+        const srcBase = opts.srcDir
+          ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
+          : 'src';
+
+        const workerdFunctions = getWorkerdFunctions();
+        const renderResult = await workerdFunctions.renderApp({
+          entryPoint: opts.input[0],
+          renderOpts: getSerializedRenderOpts(serverData, isClientDevOnly, manifest),
+          srcBase,
+        });
+
+        if (renderResult) {
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.setHeader('Cache-Control', 'no-cache, no-store, max-age=0');
           res.setHeader('Access-Control-Allow-Origin', '*');
           res.setHeader('X-Powered-By', 'Qwik Vite Dev Server');
           res.writeHead(status);
-
-          const result = await render(renderOpts);
 
           // Sometimes new CSS files are added after the initial render
           Array.from(server.moduleGraph.fileToModulesMap.entries()).forEach((entry) => {
@@ -177,10 +153,13 @@ export async function configureDevServer(
             });
           });
 
+          res.write(renderResult);
+          // Qwik question: I haven't encountered this html field, in which cases it is used?
+          // (if it's needed we need to add this bit in the workerd code above)
           // End stream
-          if ('html' in result) {
-            res.write((result as any).html);
-          }
+          // if ('html' in renderResult) {
+          //   res.write((renderResult as any).html);
+          // }
           res.write(
             END_SSR_SCRIPT(opts, opts.srcDir ? opts.srcDir : path.join(opts.rootDir, 'src'))
           );
@@ -398,3 +377,37 @@ export const getSymbolHash = (symbolName: string) => {
   }
   return symbolName;
 };
+
+/**
+ * RenderOpts (of type RenderToStreamOptions) is not serializable so we need try to generate a
+ * serialized renderOpts (it needs to be serialized so that it can be passed to workerd) in the
+ * process we throw away anything that can't be serialized, the result seems to still produce a
+ * working app, but we do need to understand the implications here, are the things that we filter
+ * out here not needed for rendering the html?
+ */
+export function getSerializedRenderOpts(
+  serverData: Record<string, any>,
+  isClientDevOnly: boolean,
+  manifest: QwikManifest
+) {
+  const { qwikcity, ...serializableServerData } = serverData;
+  const { ev, ...serializableQwikcity } = qwikcity;
+
+  const renderOpts = {
+    debug: true,
+    locale: serverData.locale,
+    snapshot: !isClientDevOnly,
+    manifest: isClientDevOnly ? undefined : manifest,
+    prefetchStrategy: null,
+    serverData: {
+      ...serializableServerData,
+      qwikcity: serializableQwikcity,
+      ev: serializeRequestEv(ev),
+    },
+    containerAttributes: {
+      ...serverData.containerAttributes,
+    },
+  };
+  const serializedRenderOpts = JSON.parse(JSON.stringify(renderOpts));
+  return serializedRenderOpts;
+}

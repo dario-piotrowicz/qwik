@@ -26,6 +26,7 @@ import type { Render, RenderToStringResult } from '@builder.io/qwik/server';
 import type { QRL, _deserializeData, _serializeData } from '@builder.io/qwik';
 import { getQwikCityServerData } from './response-page';
 import { RedirectMessage } from './redirect-handler';
+import { getWorkerdFunctions, serializeRequestEv } from 'packages/workerd-integration';
 
 export const resolveRequestHandlers = (
   serverPlugins: RouteModule[] | undefined,
@@ -140,9 +141,19 @@ const _resolveRequestHandlers = (
     }
 
     if (collectActions) {
-      const loaders = Object.values(routeModule).filter((e) =>
-        checkBrand(e, 'server_loader')
-      ) as LoaderInternal[];
+      const loaders = Object.entries(routeModule)
+        .map(([k, e]) => {
+          if (!checkBrand(e, 'server_loader')) {
+            return null;
+          }
+
+          return {
+            ...e,
+            __moduleFilePath: (routeModule as any).__filePath,
+            __loaderName: k,
+          };
+        })
+        .filter(Boolean) as LoaderInternal[];
       routeLoaders.push(...loaders);
 
       const actions = Object.values(routeModule).filter((e) =>
@@ -220,9 +231,15 @@ export function actionsMiddleware(routeLoaders: LoaderInternal[], routeActions: 
             .then((res) => {
               if (res.success) {
                 if (isDev) {
-                  return measure(requestEv, loader.__qrl.getSymbol().split('_', 1)[0], () =>
-                    loader.__qrl.call(requestEv, requestEv as any)
-                  );
+                  return measure(requestEv, loader.__qrl.getSymbol().split('_', 1)[0], async () => {
+                    const workerdFunctions = getWorkerdFunctions();
+                    const loaderResult = await workerdFunctions.runLoader({
+                      loaderName: (loader as any).__loaderName,
+                      moduleFilePath: (loader as any).__moduleFilePath,
+                      requestEv: serializeRequestEv(requestEv),
+                    });
+                    return loaderResult;
+                  });
                 } else {
                   return loader.__qrl.call(requestEv, requestEv as any);
                 }
