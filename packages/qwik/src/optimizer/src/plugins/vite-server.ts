@@ -12,7 +12,7 @@ import imageDevTools from './image-size-runtime.html?raw';
 import clickToComponent from './click-to-component.html?raw';
 import perfWarning from './perf-warning.html?raw';
 import errorHost from './error-host.html?raw';
-import { getSerializedRenderOpts, getWorkerdFunctions } from './workerd-integration';
+import { getWorkerdFunctions, serializeRequestEv, setWorkerdFunctions } from 'packages/workerd-integration';
 
 function getOrigin(req: IncomingMessage) {
   const { PROTOCOL_HEADER, HOST_HEADER } = process.env;
@@ -34,6 +34,8 @@ export async function configureDevServer(
   isClientDevOnly: boolean,
   clientDevInput: string | undefined
 ) {
+  setWorkerdFunctions(server);
+
   if (typeof fetch !== 'function' && sys.env === 'node') {
     // polyfill fetch() when not available in Node.js
 
@@ -51,8 +53,6 @@ export async function configureDevServer(
       // Nothing
     }
   }
-
-  const { renderApp } = getWorkerdFunctions(server);
 
   // qwik middleware injected BEFORE vite internal middlewares
   server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -125,7 +125,8 @@ export async function configureDevServer(
           ? path.relative(opts.rootDir, opts.srcDir).replace(/\\/g, '/')
           : 'src';
 
-        const renderResult = await renderApp({
+        const workerdFunctions = getWorkerdFunctions();
+        const renderResult = await workerdFunctions.renderApp({
           entryPoint: opts.input[0],
           renderOpts: getSerializedRenderOpts(serverData, isClientDevOnly, manifest),
           srcBase,
@@ -376,3 +377,37 @@ export const getSymbolHash = (symbolName: string) => {
   }
   return symbolName;
 };
+
+/**
+ * RenderOpts (of type RenderToStreamOptions) is not serializable so we need try to generate a
+ * serialized renderOpts (it needs to be serialized so that it can be passed to workerd) in the
+ * process we throw away anything that can't be serialized, the result seems to still produce a
+ * working app, but we do need to understand the implications here, are the things that we filter
+ * out here not needed for rendering the html?
+ */
+export function getSerializedRenderOpts(
+  serverData: Record<string, any>,
+  isClientDevOnly: boolean,
+  manifest: QwikManifest
+) {
+  const { qwikcity, ...serializableServerData } = serverData;
+  const { ev, ...serializableQwikcity } = qwikcity;
+
+  const renderOpts = {
+    debug: true,
+    locale: serverData.locale,
+    snapshot: !isClientDevOnly,
+    manifest: isClientDevOnly ? undefined : manifest,
+    prefetchStrategy: null,
+    serverData: {
+      ...serializableServerData,
+      qwikcity: serializableQwikcity,
+      ev: serializeRequestEv(ev),
+    },
+    containerAttributes: {
+      ...serverData.containerAttributes,
+    },
+  };
+  const serializedRenderOpts = JSON.parse(JSON.stringify(renderOpts));
+  return serializedRenderOpts;
+}

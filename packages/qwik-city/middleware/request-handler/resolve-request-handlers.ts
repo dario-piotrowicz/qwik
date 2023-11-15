@@ -26,7 +26,7 @@ import type { Render, RenderToStringResult } from '@builder.io/qwik/server';
 import type { QRL, _deserializeData, _serializeData } from '@builder.io/qwik';
 import { getQwikCityServerData } from './response-page';
 import { RedirectMessage } from './redirect-handler';
-import { serializeRequestEv } from 'packages/workerd-integration';
+import { getWorkerdFunctions, serializeRequestEv } from 'packages/workerd-integration';
 
 export const resolveRequestHandlers = (
   serverPlugins: RouteModule[] | undefined,
@@ -232,11 +232,11 @@ export function actionsMiddleware(routeLoaders: LoaderInternal[], routeActions: 
               if (res.success) {
                 if (isDev) {
                   return measure(requestEv, loader.__qrl.getSymbol().split('_', 1)[0], async () => {
-                    const runLoader = (globalThis as any).runLoader;
-                    const loaderResult = await runLoader({
+                    const workerdFunctions = getWorkerdFunctions();
+                    const loaderResult = await workerdFunctions.runLoader({
                       loaderName: (loader as any).__loaderName,
                       moduleFilePath: (loader as any).__moduleFilePath,
-                      requestEv: serializeRequestEv(requestEv)
+                      requestEv: serializeRequestEv(requestEv),
                     });
                     return loaderResult;
                   });

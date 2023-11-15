@@ -32,11 +32,10 @@ import {
 } from '../../middleware/request-handler/resolve-request-handlers';
 import { formatError } from './format-error';
 import { matchRoute } from 'packages/qwik-city/runtime/src/route-matcher';
-import { getWorkerdFunctions } from '../../../workerd-integration';
+import { setWorkerdFunctions } from 'packages/workerd-integration';
 
 export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
-  const fns = getWorkerdFunctions(server);
-  (globalThis as any).runLoader = fns.runLoader;
+  setWorkerdFunctions(server);
 
   const matchRouteRequest = (pathname: string) => {
     for (const route of ctx.routes) {
@@ -58,7 +57,7 @@ export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
 
   return async (req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     try {
-      if(req.url?.startsWith('/__workerd_loader/')) {
+      if (req.url?.startsWith('/__workerd_loader/')) {
         next();
         return;
       }
@@ -80,7 +79,11 @@ export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
         }
       }
 
-      const pushModuleWithFilePath = (target: RouteModule[], filePath: string, module: RouteModule) => {
+      const pushModuleWithFilePath = (
+        target: RouteModule[],
+        filePath: string,
+        module: RouteModule
+      ) => {
         // routeModules needs to contain the modules as those are still needed in the
         // rest of the middleware here, but such modules can't be serialized so we have
         // no way of passing them to workerd, so let's just add an extra __filePath field
@@ -89,7 +92,7 @@ export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
           ...module,
           __filePath: filePath,
         } as RouteModule);
-      }
+      };
 
       const routeModulePaths = new WeakMap<RouteModule, string>();
       try {
