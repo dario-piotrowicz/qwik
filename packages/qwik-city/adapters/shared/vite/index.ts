@@ -1,4 +1,4 @@
-import type { Plugin, UserConfig } from 'vite';
+import type { Connect, Plugin, UserConfig } from 'vite';
 import type { QwikCityPlugin } from '@builder.io/qwik-city/vite';
 import type { QwikVitePlugin } from '@builder.io/qwik/optimizer';
 import type {
@@ -21,7 +21,7 @@ export function viteAdapter(opts: ViteAdapterPluginOptions) {
   let format = 'esm';
   const outputEntries: string[] = [];
 
-  const plugin: Plugin = {
+  const buildPlugin: Plugin = {
     name: `vite-plugin-qwik-city-${opts.name}`,
     enforce: 'post',
     apply: 'build',
@@ -199,7 +199,21 @@ export function viteAdapter(opts: ViteAdapterPluginOptions) {
     },
   };
 
-  return plugin;
+  let servePlugin: Plugin | null = null;
+
+  if (opts.middlewares?.length) {
+    servePlugin = {
+      name: `vite-plugin-qwik-city-dev-${opts.name}`,
+      apply: 'serve',
+      enforce: 'pre',
+
+      configureServer(server) {
+        opts.middlewares!.forEach((middleware) => server.middlewares.use(middleware));
+      },
+    };
+  }
+
+  return [buildPlugin, ...(servePlugin ? [servePlugin] : [])];
 }
 
 /** @public */
@@ -237,6 +251,7 @@ interface ViteAdapterPluginOptions {
     warn: (message: string) => void;
     error: (message: string) => void;
   }) => Promise<void>;
+  middlewares?: Connect.NextHandleFunction[];
 }
 
 /** @public */

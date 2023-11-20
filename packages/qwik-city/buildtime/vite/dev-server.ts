@@ -186,6 +186,11 @@ export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
         if (requestHandlers.length > 0) {
           const serverRequestEv = await fromNodeHttp(url, req, res, 'dev');
           Object.assign(serverRequestEv.platform, ctx.opts.platform);
+          const qwikEnvData = (res as QwikViteDevResponse)._qwikEnvData;
+          if (qwikEnvData) {
+            const devPlatform = qwikEnvData['devPlatform'] ?? {};
+            Object.assign(serverRequestEv.platform, devPlatform);
+          }
 
           const manifest: QwikManifest = {
             manifestHash: '',

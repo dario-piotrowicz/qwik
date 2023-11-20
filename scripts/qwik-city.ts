@@ -355,7 +355,7 @@ async function buildAdapterCloudflarePagesVite(config: BuildConfig) {
     platform: 'node',
     target: nodeTarget,
     format: 'esm',
-    external: ADAPTER_EXTERNALS,
+    external: [...ADAPTER_EXTERNALS, 'miniflare'],
     plugins: [resolveAdapterShared('../../shared/vite/index.mjs')],
   });
 
@@ -366,7 +366,7 @@ async function buildAdapterCloudflarePagesVite(config: BuildConfig) {
     platform: 'node',
     target: nodeTarget,
     format: 'cjs',
-    external: ADAPTER_EXTERNALS,
+    external: [...ADAPTER_EXTERNALS, 'miniflare'],
     plugins: [resolveAdapterShared('../../shared/vite/index.cjs')],
   });
 }
