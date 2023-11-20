@@ -3,9 +3,14 @@ import { type ServerAdapterOptions, viteAdapter } from '../../shared/vite';
 import fs from 'node:fs';
 import { join, relative } from 'node:path';
 import { normalizePathSlash } from '../../../utils/fs';
+import type { QwikViteDevResponse } from '@builder.io/qwik/optimizer';
+import type { Connect } from 'vite';
+import { Miniflare, type WorkerOptions } from 'miniflare';
 
 /** @public */
-export function cloudflarePagesAdapter(opts: CloudflarePagesAdapterOptions = {}): any {
+export async function cloudflarePagesAdapter(
+  opts: CloudflarePagesAdapterOptions = {}
+): Promise<any> {
   const env = process?.env;
   return viteAdapter({
     name: 'cloudflare-pages',
@@ -58,7 +63,42 @@ export function cloudflarePagesAdapter(opts: CloudflarePagesAdapterOptions = {})
         );
       }
     },
+    middlewares: await getCloudflarePagesMiddlewares(opts),
   });
+}
+
+async function getCloudflarePagesMiddlewares(
+  opts: CloudflarePagesAdapterOptions
+): Promise<Connect.NextHandleFunction[]> {
+  // Note: this function is currently just a simplifies POC version of the final one
+  //       what it needs to do is simply: collect the bindings from opts, instantiate miniflare, get the bindings
+  //       from miniflare and set the in the middleware
+
+  const kvNamespaces = opts.kvNamespaces;
+
+  const workers: WorkerOptions[] = [
+    {
+      kvNamespaces,
+      modules: true,
+      script: '',
+    },
+  ];
+
+  const mf = new Miniflare({
+    workers,
+  });
+
+  const bindings = await mf.getBindings();
+
+  return [
+    (_req, res, next) => {
+      (res as QwikViteDevResponse)._qwikEnvData = {
+        ...(res as QwikViteDevResponse)._qwikEnvData,
+        devPlatform: { env: bindings },
+      };
+      next();
+    },
+  ];
 }
 
 /** @public */
@@ -77,6 +117,9 @@ export interface CloudflarePagesAdapterOptions extends ServerAdapterOptions {
    * server-side rendered response.
    */
   staticPaths?: string[];
+
+  // temporary POC option
+  kvNamespaces?: string[];
 }
 
 /** @public */
