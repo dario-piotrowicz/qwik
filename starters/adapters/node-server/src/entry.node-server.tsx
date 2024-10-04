@@ -8,20 +8,13 @@
  *
  */
 import { createQwikCity } from "@builder.io/qwik-city/middleware/node";
-import qwikCityPlan from "@qwik-city-plan";
-import render from "./entry.ssr";
-import { manifest } from "@qwik-client-manifest";
 import { createServer } from "node:http";
 
 // Allow for dynamic port
 const PORT = process.env.PORT ?? 3004;
 
 // Create the Qwik City express middleware
-const { router, notFound, staticFile } = createQwikCity({
-  render,
-  qwikCityPlan,
-  manifest,
-});
+const { router, notFound, staticFile } = createQwikCity();
 
 const server = createServer();
 

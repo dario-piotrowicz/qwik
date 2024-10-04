@@ -442,7 +442,7 @@ export function createPlugin(optimizerOptions: OptimizerOptions = {}) {
 
     if (id.endsWith(QWIK_CLIENT_MANIFEST_ID)) {
       debug(`resolveId(${count})`, 'Resolved', QWIK_CLIENT_MANIFEST_ID);
-      if (opts.target === 'lib') {
+      if (opts.target === 'lib' || !opts.input) {
         return {
           id: id,
           external: true,
@@ -637,7 +637,10 @@ export function createPlugin(optimizerOptions: OptimizerOptions = {}) {
     const dir = parsedPathId.dir;
     const base = parsedPathId.base;
     const ext = parsedPathId.ext.toLowerCase();
-    if (ext in TRANSFORM_EXTS || TRANSFORM_REGEX.test(pathId)) {
+    if (
+      ext in TRANSFORM_EXTS ||
+      (ext in RESOLVE_EXTS && code.slice(0, 5000).includes(QWIK_CORE_ID))
+    ) {
       /** Strip client|server code from qwik server|client, but not in lib/test */
       const strip = opts.target === 'client' || opts.target === 'ssr';
       const normalizedID = normalizePath(pathId);
@@ -756,6 +759,10 @@ export function createPlugin(optimizerOptions: OptimizerOptions = {}) {
     }
 
     debug(`transform()`, 'Not transforming', id);
+
+    if (id.endsWith('/@qwik-client-manifest')) {
+      debugger;
+    }
 
     return null;
   };

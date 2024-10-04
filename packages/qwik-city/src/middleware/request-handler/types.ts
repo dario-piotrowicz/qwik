@@ -45,8 +45,6 @@ export type ServerResponseHandler<T = any> = (
 
 /** @public */
 export interface ServerRenderOptions extends RenderOptions {
-  render: Render;
-  qwikCityPlan: QwikCityPlan;
   /**
    * Protection against cross-site request forgery (CSRF) attacks.
    *

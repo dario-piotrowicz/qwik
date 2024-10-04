@@ -2,7 +2,7 @@ import swRegister from '@qwik-city-sw-register-build';
 import { createMdxTransformer, type MdxTransform } from '../markdown/mdx';
 import { basename, join, resolve, extname } from 'node:path';
 import type { Plugin, PluginOption, UserConfig, Rollup } from 'vite';
-import { loadEnv } from 'vite';
+import { BuildEnvironment, loadEnv } from 'vite';
 import { generateQwikCityPlan } from '../runtime-generation/generate-qwik-city-plan';
 import type { BuildContext } from '../types';
 import { createBuildContext, resetBuildContext } from '../context';
@@ -27,6 +27,7 @@ import {
 } from '../../adapters/shared/vite';
 import { postBuild } from '../../adapters/shared/vite/post-build';
 import { imagePlugin } from './image-jsx';
+import { createRunnableDevEnvironment } from 'vite';
 
 /** @public */
 export function qwikCity(userOpts?: QwikCityVitePluginOptions): PluginOption[] {
@@ -70,6 +71,20 @@ function qwikCityPlugin(userOpts?: QwikCityVitePluginOptions): any {
           external: ['node:async_hooks'],
           noExternal: [QWIK_CITY, QWIK_CITY_PLAN_ID, QWIK_CITY_ENTRIES_ID, QWIK_CITY_SW_REGISTER],
         },
+        environments: {
+          node: {
+            dev: {
+              createEnvironment(name, config) {
+                return createRunnableDevEnvironment(name, config);
+              },
+            },
+            build: {
+              createEnvironment(name, config) {
+                return new BuildEnvironment(name, config);
+              },
+            },
+          },
+        },
       };
       return updatedViteConfig;
     },
@@ -82,8 +97,8 @@ function qwikCityPlugin(userOpts?: QwikCityVitePluginOptions): any {
 
       ctx = createBuildContext(rootDir!, config.base, userOpts, target);
 
-      ctx.isDevServer = config.command === 'serve' && config.mode !== 'production';
-      ctx.isDevServerClientOnly = ctx.isDevServer && config.mode !== 'ssr';
+      ctx.isDevServer = false; // config.command === 'serve' && config.mode !== 'production';
+      ctx.isDevServerClientOnly = false; // ctx.isDevServer && config.mode !== 'ssr';
 
       await validatePlugin(ctx.opts);
 
@@ -101,20 +116,23 @@ function qwikCityPlugin(userOpts?: QwikCityVitePluginOptions): any {
       outDir = config.build?.outDir;
     },
 
-    configureServer(server) {
-      return () => {
-        if (!ctx) {
-          throw new Error('configureServer: Missing ctx from configResolved');
-        }
-        if (!ctx.isDevServer) {
-          // preview server: serve static files from the dist directory
-          server.middlewares.use(staticDistMiddleware(server));
-        }
-        // qwik city middleware injected BEFORE vite internal middlewares
-        // and BEFORE @builder.io/qwik/optimizer/vite middlewares
-        // handles only known user defined routes
-        server.middlewares.use(ssrDevMiddleware(ctx, server));
-      };
+    configureServer: {
+      order: 'post',
+      handler(server) {
+        return () => {
+          if (!ctx) {
+            throw new Error('configureServer: Missing ctx from configResolved');
+          }
+          if (!ctx.isDevServer) {
+            // preview server: serve static files from the dist directory
+            server.middlewares.use(staticDistMiddleware(server));
+          }
+          // qwik city middleware injected BEFORE vite internal middlewares
+          // and BEFORE @builder.io/qwik/optimizer/vite middlewares
+          // handles only known user defined routes
+          server.middlewares.use(ssrDevMiddleware(ctx, server));
+        };
+      },
     },
 
     buildStart() {
@@ -153,6 +171,7 @@ function qwikCityPlugin(userOpts?: QwikCityVitePluginOptions): any {
     },
 
     async load(id, opts) {
+      console.log('load', id);
       if (ctx) {
         if (id.endsWith(QWIK_CITY_ENTRIES_ID)) {
           // @qwik-city-entries
@@ -166,7 +185,8 @@ function qwikCityPlugin(userOpts?: QwikCityVitePluginOptions): any {
           return `export {_deserialize, _serialize, _verifySerializable} from '@builder.io/qwik'`;
         }
         if (isCityPlan || isSwRegister) {
-          if (!ctx.isDevServer && ctx.isDirty) {
+          if (ctx.isDirty) {
+            console.log('building qc plan');
             await build(ctx);
             ctx.isDirty = false;
             ctx.diagnostics.forEach((d) => {
@@ -183,6 +203,33 @@ function qwikCityPlugin(userOpts?: QwikCityVitePluginOptions): any {
             // @qwik-city-sw-register
             return generateServiceWorkerRegister(ctx, swRegister);
           }
+        }
+
+        // TODO: we need to properly generate the value below and not just hardcoding it
+        //       (note: this file is currently generated at build time here: packages/qwik-city/src/adapters/shared/vite/index.ts)
+        if (id.endsWith(RESOLVED_NOT_FOUND_PATHS_ID)) {
+          return `
+            export function getNotFound(_pathname) {
+              return 'Resource Not Found';
+            }
+          `;
+        }
+
+        // TODO: we need to properly generate the value below and not just hardcoding it
+        //       (note: this file is currently generated at build time here: packages/qwik-city/src/adapters/shared/vite/index.ts)
+        if (id.endsWith(RESOLVED_STATIC_PATHS_ID)) {
+          return `
+            export function isStaticPath(method, url) {
+              if (method !== 'GET') {
+                return false;
+              }
+              if (url.search !== '') {
+                return false;
+              }
+
+              return /\\.(jpg|jpeg|png|webp|avif|gif|svg)$/.test(url.pathname);
+            }
+          `;
         }
       }
       return null;

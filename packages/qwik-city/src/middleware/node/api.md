@@ -13,7 +13,7 @@ import type { ServerRenderOptions } from '@builder.io/qwik-city/middleware/reque
 import type { ServerResponse } from 'node:http';
 
 // @public (undocumented)
-export function createQwikCity(opts: QwikCityNodeRequestOptions): {
+export function createQwikCity(opts?: QwikCityNodeRequestOptions): {
     router: (req: IncomingMessage | Http2ServerRequest, res: ServerResponse, next: NodeRequestNextFunction) => Promise<void>;
     notFound: (req: IncomingMessage | Http2ServerRequest, res: ServerResponse, next: (e: any) => void) => Promise<void>;
     staticFile: (req: IncomingMessage | Http2ServerRequest, res: ServerResponse, next: (e?: any) => void) => Promise<void>;

@@ -7,7 +7,7 @@ title: \@builder.io/qwik-city/middleware/node API Reference
 ## createQwikCity
 
 ```typescript
-export declare function createQwikCity(opts: QwikCityNodeRequestOptions): {
+export declare function createQwikCity(opts?: QwikCityNodeRequestOptions): {
   router: (
     req: IncomingMessage | Http2ServerRequest,
     res: ServerResponse,
@@ -48,6 +48,8 @@ opts
 [QwikCityNodeRequestOptions](#qwikcitynoderequestoptions)
 
 </td><td>
+
+_(Optional)_
 
 </td></tr>
 </tbody></table>

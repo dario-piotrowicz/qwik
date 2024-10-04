@@ -14,6 +14,8 @@ export function generateQwikCityPlan(
   const esmImports: string[] = [];
   const c: string[] = [];
 
+  console.log('generateQwikCityPlan');
+
   c.push(`\n/** Qwik City Plan */`);
 
   createServerPlugins(ctx, qwikPlugin, c, esmImports, isSSR);

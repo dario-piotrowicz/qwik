@@ -1,9 +1,9 @@
-import { build, type Plugin, transform } from 'esbuild';
+import { build, transform, type Plugin } from 'esbuild';
 import { execa } from 'execa';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { rollup } from 'rollup';
-import { type BuildConfig, emptyDir, importPath, nodeTarget, panic } from './util';
+import { emptyDir, importPath, nodeTarget, panic, type BuildConfig } from './util';
 
 export async function buildQwikCity(config: BuildConfig) {
   if (!config.dev) {
@@ -550,6 +550,16 @@ async function buildMiddlewareNode(config: BuildConfig) {
   });
 
   await build({
+    entryPoints: [join(config.srcQwikCityDir, 'middleware', 'node', 'entry.dev.ts')],
+    outfile: join(config.distQwikCityPkgDir, 'middleware', 'node', 'entry.dev.mjs'),
+    bundle: true,
+    platform: 'node',
+    target: nodeTarget,
+    format: 'esm',
+    external: [...external, '.'],
+  });
+
+  await build({
     entryPoints,
     outfile: join(config.distQwikCityPkgDir, 'middleware', 'node', 'index.cjs'),
     bundle: true,
@@ -725,4 +735,5 @@ const MIDDLEWARE_EXTERNALS = [
   '@qwik-city-plan',
   '@qwik-city-not-found-paths',
   '@qwik-city-static-paths',
+  '@qwik-client-manifest',
 ];

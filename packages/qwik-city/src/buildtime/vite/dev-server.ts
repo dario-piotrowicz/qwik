@@ -1,312 +1,55 @@
-import type { QwikManifest, QwikViteDevResponse } from '@builder.io/qwik/optimizer';
 import fs from 'node:fs';
 import type { ServerResponse } from 'node:http';
 import { join, resolve } from 'node:path';
-import type { Connect, ViteDevServer } from 'vite';
-import { computeOrigin, fromNodeHttp, getUrl } from '../../middleware/node/http';
-import {
-  checkBrand,
-  resolveRequestHandlers,
-} from '../../middleware/request-handler/resolve-request-handlers';
-import { getQwikCityServerData } from '../../middleware/request-handler/response-page';
-import {
-  getRouteMatchPathname,
-  QDATA_JSON,
-  runQwikCity,
-} from '../../middleware/request-handler/user-response';
-import { getMenuLoader } from '../../runtime/src/routing';
-import type {
-  ActionInternal,
-  ContentMenu,
-  LoadedRoute,
-  LoaderInternal,
-  MenuData,
-  MenuModule,
-  MenuModuleLoader,
-  PathParams,
-  RequestEvent,
-  RouteModule,
-} from '../../runtime/src/types';
+import { fileURLToPath } from 'node:url';
+import { type Connect, type RunnableDevEnvironment, type ViteDevServer } from 'vite';
+import { computeOrigin, getUrl } from '../../middleware/node/http';
+import { checkBrand } from '../../middleware/request-handler/resolve-request-handlers';
+import type { ActionInternal, LoaderInternal, RouteModule } from '../../runtime/src/types';
 import { getExtension, normalizePath } from '../../utils/fs';
-import { updateBuildContext } from '../build';
 import type { BuildContext, BuildRoute } from '../types';
 import { formatError } from './format-error';
-import { matchRoute } from '../../runtime/src/route-matcher';
-import type { QwikSerializer } from 'packages/qwik-city/src/middleware/request-handler/types';
 
+/*
+req -> vite
+
+req is for src? => vite responds with built file
+
+req is anything else? => send to environment, ask node-server to handle it
+
+*/
 export function ssrDevMiddleware(ctx: BuildContext, server: ViteDevServer) {
-  const matchRouteRequest = (pathname: string) => {
-    for (const route of ctx.routes) {
-      let params = matchRoute(route.pathname, pathname);
-      if (params) {
-        return { route, params };
-      }
-
-      if (ctx.opts.trailingSlash && !pathname.endsWith('/')) {
-        params = matchRoute(route.pathname, pathname + '/');
-        if (params) {
-          return { route, params };
-        }
-      }
-    }
-
-    return null;
-  };
-
-  const routePs: Record<string, ReturnType<typeof _resolveRoute>> = {};
-  const _resolveRoute = async (
-    routeModulePaths: WeakMap<RouteModule<unknown>, string>,
-    matchPathname: string
-  ) => {
-    await updateBuildContext(ctx);
-    for (const d of ctx.diagnostics) {
-      if (d.type === 'error') {
-        console.error(d.message);
-      } else {
-        console.warn(d.message);
-      }
-    }
-
-    // use vite to dynamically load each layout/page module in this route's hierarchy
-    const loaderMap = new Map<string, string>();
-    const serverPlugins: RouteModule[] = [];
-    for (const file of ctx.serverPlugins) {
-      const layoutModule = await server.ssrLoadModule(file.filePath);
-      serverPlugins.push(layoutModule);
-      routeModulePaths.set(layoutModule, file.filePath);
-      checkModule(loaderMap, layoutModule, file.filePath);
-    }
-
-    const routeResult = matchRouteRequest(matchPathname);
-    const routeModules: RouteModule[] = [];
-
-    let params: PathParams = {};
-    if (routeResult) {
-      const route = routeResult.route;
-      params = routeResult.params;
-
-      // found a matching route
-      for (const layout of route.layouts) {
-        const layoutModule = await server.ssrLoadModule(layout.filePath);
-        routeModules.push(layoutModule);
-        routeModulePaths.set(layoutModule, layout.filePath);
-        checkModule(loaderMap, layoutModule, layout.filePath);
-      }
-      const endpointModule = await server.ssrLoadModule(route.filePath);
-      routeModules.push(endpointModule);
-      routeModulePaths.set(endpointModule, route.filePath);
-      checkModule(loaderMap, endpointModule, route.filePath);
-    }
-
-    let menu: ContentMenu | undefined = undefined;
-    const menus = ctx.menus.map((buildMenu) => {
-      const menuLoader: MenuModuleLoader = async () => {
-        const m = await server.ssrLoadModule(buildMenu.filePath);
-        const menuModule: MenuModule = {
-          default: m.default,
-        };
-        return menuModule;
-      };
-      const menuData: MenuData = [buildMenu.pathname, menuLoader];
-      return menuData;
-    });
-
-    const menuLoader = getMenuLoader(menus, matchPathname);
-    if (menuLoader) {
-      const menuModule = await menuLoader();
-      menu = menuModule?.default;
-    }
-
-    const loadedRoute = [
-      routeResult ? routeResult.route.pathname : '',
-      params,
-      routeModules,
-      menu,
-      undefined,
-    ] satisfies LoadedRoute;
-    return { serverPlugins, loadedRoute };
-  };
-  const resolveRoute = (routeModulePaths: WeakMap<RouteModule<unknown>, string>, url: URL) => {
-    const matchPathname = getRouteMatchPathname(url.pathname, ctx.opts.trailingSlash);
-    routePs[matchPathname] ||= _resolveRoute(routeModulePaths, matchPathname).finally(() => {
-      delete routePs[matchPathname];
-    });
-    return routePs[matchPathname];
-  };
-
-  // Preload the modules needed to handle /, so that they load faster on first request.
-  resolveRoute(new WeakMap(), new URL('/', 'http://localhost')).catch((e: unknown) => {
-    if (e instanceof Error) {
-      server.ssrFixStacktrace(e);
-      formatError(e);
-    }
-  });
-
   return async (req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     try {
       const url = getUrl(req, computeOrigin(req));
+      console.log({ url });
 
-      if (shouldSkipRequest(url.pathname) || isVitePing(url.pathname, req.headers)) {
-        next();
-        return;
+      // if (shouldSkipRequest(url.pathname) || isVitePing(url.pathname, req.headers)) {
+      //   next();
+      //   return;
+      // }
+
+      const nodeMiddlewareIndex = join(
+        fileURLToPath(import.meta.url),
+        '..',
+        '..',
+        'middleware',
+        'node',
+        'entry.dev'
+      );
+
+      // Run the node middleware in-process
+      const mod = await (server.environments.node as RunnableDevEnvironment).runner.import(
+        nodeMiddlewareIndex
+      );
+      mod.default(req, res, next);
+    } catch (e: any) {
+      if (e instanceof Error) {
+        server.ssrFixStacktrace(e);
+        formatError(e);
       }
-
-      // Normally, entries are served statically, so in dev mode we need to handle them here.
-      const matchRouteName = url.pathname.slice(1);
-      const entry = ctx.entries.find((e) => e.routeName === matchRouteName);
-      if (entry) {
-        const entryContents = await server.transformRequest(
-          `/@fs${entry.filePath.startsWith('/') ? '' : '/'}${entry.filePath}`
-        );
-
-        if (entryContents) {
-          res.setHeader('Content-Type', 'text/javascript');
-          res.end(entryContents.code);
-        } else {
-          next();
-        }
-        return;
-      }
-
-      const routeModulePaths = new WeakMap<RouteModule, string>();
-      try {
-        const { serverPlugins, loadedRoute } = await resolveRoute(routeModulePaths, url);
-
-        const renderFn = async (requestEv: RequestEvent) => {
-          // routeResult && requestEv.sharedMap.set('@routeName', routeResult.route.pathname);
-          const isPageDataReq = requestEv.pathname.endsWith(QDATA_JSON);
-          if (!isPageDataReq) {
-            const serverData = getQwikCityServerData(requestEv);
-
-            res.statusCode = requestEv.status();
-            requestEv.headers.forEach((value, key) => {
-              res.setHeader(key, value);
-            });
-
-            const cookieHeaders = requestEv.cookie.headers();
-            if (cookieHeaders.length > 0) {
-              res.setHeader('Set-Cookie', cookieHeaders);
-            }
-
-            const serverTiming = requestEv.sharedMap.get('@serverTiming') as
-              | [string, number][]
-              | undefined;
-            if (serverTiming) {
-              res.setHeader(
-                'Server-Timing',
-                serverTiming.map((a) => `${a[0]};dur=${a[1]}`).join(',')
-              );
-            }
-            (res as QwikViteDevResponse)._qwikEnvData = {
-              ...(res as QwikViteDevResponse)._qwikEnvData,
-              ...serverData,
-            };
-
-            const qwikRenderPromise = new Promise<void>((resolve) => {
-              (res as QwikViteDevResponse)._qwikRenderResolve = resolve;
-            });
-
-            next();
-
-            return qwikRenderPromise;
-          }
-        };
-
-        const requestHandlers = resolveRequestHandlers(
-          serverPlugins,
-          loadedRoute,
-          req.method ?? 'GET',
-          false,
-          renderFn
-        );
-
-        if (requestHandlers.length > 0) {
-          const serverRequestEv = await fromNodeHttp(url, req, res, 'dev');
-          Object.assign(serverRequestEv.platform, ctx.opts.platform);
-
-          const manifest: QwikManifest = {
-            manifestHash: '',
-            symbols: {},
-            mapping: {},
-            bundles: {},
-            injections: [],
-            version: '1',
-          };
-
-          const { _deserialize, _serialize, _verifySerializable } =
-            await server.ssrLoadModule('@qwik-serializer');
-          const qwikSerializer: QwikSerializer = { _deserialize, _serialize, _verifySerializable };
-
-          const { completion, requestEv } = runQwikCity(
-            serverRequestEv,
-            loadedRoute,
-            requestHandlers,
-            manifest,
-            ctx.opts.trailingSlash,
-            ctx.opts.basePathname,
-            qwikSerializer
-          );
-          const result = await completion;
-          if (result != null) {
-            throw result;
-          }
-
-          if (requestEv.headersSent || res.headersSent) {
-            return;
-          }
-        } else {
-          // no matching route
-
-          // test if this is a dev service-worker.js request
-          for (const sw of ctx.serviceWorkers) {
-            const match = sw.pattern.exec(req.originalUrl!);
-            if (match) {
-              res.setHeader('Content-Type', 'text/javascript');
-              res.end(DEV_SERVICE_WORKER);
-              return;
-            }
-          }
-        }
-      } catch (e: any) {
-        if (e instanceof Error) {
-          server.ssrFixStacktrace(e);
-          formatError(e);
-        }
-        if (e instanceof Error && (e as any).id === 'DEV_SERIALIZE') {
-          next(formatDevSerializeError(e, routeModulePaths));
-        } else {
-          next(e);
-        }
-        return;
-      }
-
-      // simple test if it's a static file
-      const ext = getExtension(req.originalUrl!);
-      if (STATIC_CONTENT_TYPES[ext]) {
-        // let the static asset middleware handle this
-        next();
-        return;
-      }
-
-      if (req.headers.accept && req.headers.accept.includes('text/html')) {
-        /**
-         * If no route match, but is html request, fast path to 404 otherwise qwik plugin will take
-         * over render without envData causing error
-         */
-        // TODO: after file change, need to manual page refresh to see changes currently
-        //       there's two ways handling HMR for page endpoint with error
-        // 1. Html response inject `import.meta.hot.accept('./pageEndpoint_FILE_URL', () => { location.reload })`
-        // 2. watcher, diff previous & current file content, a bit expensive
-        const html = getUnmatchedRouteHtml(url, ctx);
-        res.statusCode = 404;
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(html);
-        return;
-      }
-
-      next();
-    } catch (e) {
       next(e);
+      return;
     }
   };
 }

@@ -1,6 +1,8 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "jsxImportSource": "@builder.io/qwik",
+    "jsx": "react-jsx",
     "paths": {
       "@builder.io/qwik-city": ["packages/qwik-city/src/runtime/src/index.ts"],
       "@builder.io/qwik-city/service-worker": [

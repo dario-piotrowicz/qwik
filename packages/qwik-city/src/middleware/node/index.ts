@@ -15,21 +15,18 @@ import { MIME_TYPES } from '../request-handler/mime-types';
 import { _deserialize, _serialize, _verifySerializable } from '@builder.io/qwik';
 import type { Http2ServerRequest } from 'node:http2';
 import type { QwikSerializer } from '../request-handler/types';
+import qwikCityPlan from '@qwik-city-plan';
+import { manifest } from '@qwik-client-manifest';
 
-// @builder.io/qwik-city/middleware/node
-
-/** @public */
-export function createQwikCity(opts: QwikCityNodeRequestOptions) {
+export function createQwikCity(opts: QwikCityNodeRequestOptions = {}) {
+  /** @public */
   const qwikSerializer: QwikSerializer = {
     _deserialize,
     _serialize,
     _verifySerializable,
   };
-  if (opts.manifest) {
-    setServerPlatform(opts.manifest);
-  }
-  const staticFolder =
-    opts.static?.root ?? join(fileURLToPath(import.meta.url), '..', '..', 'dist');
+  setServerPlatform(manifest);
+  const staticFolder = join(fileURLToPath(import.meta.url), '..', '..', 'dist');
 
   const router = async (
     req: IncomingMessage | Http2ServerRequest,
@@ -38,14 +35,8 @@ export function createQwikCity(opts: QwikCityNodeRequestOptions) {
   ) => {
     try {
       const origin = computeOrigin(req, opts);
-      const serverRequestEv = await fromNodeHttp(
-        getUrl(req, origin),
-        req,
-        res,
-        'server',
-        opts.getClientConn
-      );
-      const handled = await requestHandler(serverRequestEv, opts, qwikSerializer);
+      const serverRequestEv = await fromNodeHttp(getUrl(req, origin), req, res, 'server');
+      const handled = await requestHandler(serverRequestEv, {}, qwikSerializer);
       if (handled) {
         const err = await handled.completion;
         if (err) {
@@ -103,7 +94,7 @@ export function createQwikCity(opts: QwikCityNodeRequestOptions) {
         let filePath: string;
         if (basename(pathname).includes('.')) {
           filePath = join(staticFolder, pathname);
-        } else if (opts.qwikCityPlan.trailingSlash) {
+        } else if (qwikCityPlan.trailingSlash) {
           filePath = join(staticFolder, pathname + 'index.html');
         } else {
           filePath = join(staticFolder, pathname, 'index.html');
@@ -116,10 +107,6 @@ export function createQwikCity(opts: QwikCityNodeRequestOptions) {
 
         if (contentType) {
           res.setHeader('Content-Type', contentType);
-        }
-
-        if (opts.static?.cacheControl) {
-          res.setHeader('Cache-Control', opts.static.cacheControl);
         }
 
         stream.pipe(res);
