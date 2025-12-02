@@ -16,7 +16,9 @@ import type { EnsureImport, ViteConfigUpdates } from '../types';
 export function updateViteConfig(ts: TypeScript, sourceText: string, updates?: ViteConfigUpdates) {
   if (
     !updates?.imports &&
+    !updates?.afterImports &&
     !updates?.qwikViteConfig &&
+    !updates?.qwikCityConfig &&
     !updates?.viteConfig &&
     !updates?.vitePlugins &&
     !updates?.vitePluginsPrepend
@@ -31,6 +33,10 @@ export function updateViteConfig(ts: TypeScript, sourceText: string, updates?: V
       }
     }
 
+    if (updates.afterImports) {
+      tsSourceFile = insertAfterImports(ts, tsSourceFile, updates.afterImports);
+    }
+
     const statements: Statement[] = [];
 
     for (const s of tsSourceFile.statements) {
@@ -40,6 +46,7 @@ export function updateViteConfig(ts: TypeScript, sourceText: string, updates?: V
           s.expression.expression.text === 'defineConfig' &&
           (updates.viteConfig ||
             updates.qwikViteConfig ||
+            updates.qwikCityConfig ||
             updates.vitePlugins ||
             updates.vitePluginsPrepend)
         ) {
@@ -60,6 +67,43 @@ export function updateViteConfig(ts: TypeScript, sourceText: string, updates?: V
   });
 
   return sourceText;
+}
+
+function insertAfterImports(ts: TypeScript, tsSourceFile: SourceFile, afterImports: string[]) {
+  const statements = tsSourceFile.statements.slice();
+
+  let indexOfLastImport = 0;
+  while (indexOfLastImport < statements.length) {
+    if (!('importClause' in statements[indexOfLastImport])) {
+      break;
+    }
+    indexOfLastImport++;
+  }
+
+  const tmp = ts.createSourceFile(
+    'tmp.ts',
+    'export default {};' + afterImports.join('\n'),
+    ts.ScriptTarget.Latest
+  );
+
+  const tmpStatements: Statement[] = tmp.statements
+    .filter((s) => !ts.isExportAssignment(s))
+    .map((s) => {
+      const { pos, end, ...statement } = { ...s };
+      // We want to invalidate pos and end to make since they don't relate
+      // the original source file
+      return { ...statement, pos: -1, end: -1 };
+    });
+
+  const newStatements: Statement[] = [
+    ts.factory.createIdentifier('\n') as unknown as Statement,
+    ...tmpStatements,
+    ts.factory.createIdentifier('\n') as unknown as Statement,
+  ];
+
+  statements.splice(indexOfLastImport, 0, ...newStatements);
+
+  return ts.factory.updateSourceFile(tsSourceFile, statements);
 }
 
 function ensureImport(ts: TypeScript, tsSourceFile: SourceFile, importData: EnsureImport) {
@@ -350,7 +394,12 @@ function updateVitConfigObj(
   if (updates.viteConfig) {
     obj = updateObjectLiteralExpression(ts, obj, updates.viteConfig);
   }
-  if (updates.vitePlugins || updates.vitePluginsPrepend || updates.qwikViteConfig) {
+  if (
+    updates.vitePlugins ||
+    updates.vitePluginsPrepend ||
+    updates.qwikViteConfig ||
+    updates.qwikCityConfig
+  ) {
     obj = updatePlugins(ts, obj, updates);
   }
   return obj;
@@ -419,12 +468,23 @@ function updatePluginsArray(
     }
   }
 
+  if (updates.qwikCityConfig) {
+    for (let i = 0; i < elms.length; i++) {
+      const elm = elms[i];
+      if (ts.isCallExpression(elm) && ts.isIdentifier(elm.expression)) {
+        if (elm.expression.escapedText === 'qwikCity') {
+          elms[i] = updateQwikPlugin(ts, elm, updates.qwikCityConfig);
+        }
+      }
+    }
+  }
+
   if (updates.qwikViteConfig) {
     for (let i = 0; i < elms.length; i++) {
       const elm = elms[i];
       if (ts.isCallExpression(elm) && ts.isIdentifier(elm.expression)) {
         if (elm.expression.escapedText === 'qwikVite') {
-          elms[i] = updateQwikCityPlugin(ts, elm, updates.qwikViteConfig);
+          elms[i] = updateQwikPlugin(ts, elm, updates.qwikViteConfig);
         }
       }
     }
@@ -449,7 +509,7 @@ function createPluginCall(ts: TypeScript, vitePlugin: string): CallExpression | 
   return null;
 }
 
-function updateQwikCityPlugin(
+function updateQwikPlugin(
   ts: TypeScript,
   callExp: CallExpression,
   qwikViteConfig: { [key: string]: string }

@@ -103,9 +103,11 @@ export interface EnsureImport {
 
 export interface ViteConfigUpdates {
   imports?: EnsureImport[];
+  afterImports?: string[];
   viteConfig?: { [key: string]: string };
   vitePlugins?: string[];
   vitePluginsPrepend?: string[];
+  qwikCityConfig?: { [key: string]: string };
   qwikViteConfig?: { [key: string]: string };
 }
 
